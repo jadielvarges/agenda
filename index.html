@@ -244,6 +244,20 @@ html[data-tema="claro"] .chip.on{background:rgba(242,193,78,.24);border-color:#D
 .rf-linha{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .rf-lbl{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);min-width:66px}
 .rf-chips{display:flex;gap:6px;flex-wrap:wrap;flex:1}
+/* fechamento por turma */
+.fech-datas{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:0 0 14px}
+.fech-datas>div{display:flex;align-items:center;gap:8px}
+.fd-lbl{font-family:var(--ff-mono);font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint)}
+.fech-tbl th.num,.fech-tbl td.num{text-align:right;white-space:nowrap}
+.fech-tbl td.num{font-family:var(--ff-mono);font-size:12.5px}
+.fech-tbl td.num b{font-size:14px;color:var(--text)}
+.fech-turma{min-width:190px;line-height:1.4}
+.fech-pend{color:var(--gold);font-weight:600}
+.fech-tot td{border-top:1.5px solid var(--line-strong);font-weight:600;color:var(--text-2)}
+.fech-rodape{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:13px;
+  font-size:12px;color:var(--muted);line-height:1.5}
+.fech-rodape>span{flex:1;min-width:180px}
+@media(max-width:620px){ .fech-datas{gap:9px} .fech-turma{min-width:140px;font-size:12px} }
 /* aviso de linhas que já existem na agenda */
 .rev-aviso{display:flex;gap:9px;align-items:flex-start;border:1px solid var(--line);border-left:3px solid var(--menta);
   border-radius:10px;padding:10px 13px;margin:0 0 13px;background:var(--surface-2);font-size:12.5px;line-height:1.6;color:var(--muted)}
@@ -1830,6 +1844,7 @@ html.trocando-tema::view-transition-new(root){ animation:tema-revela var(--t-4) 
           <div class="mono" id="perLabel" style="min-width:190px;text-align:center;font-size:12.5px;color:var(--text-2)"></div>
           <button class="btn btn-ico btn-sm" id="perProx" data-tooltip="Próximo período"><svg><use href="#i-dir"/></svg></button>
           <div style="flex:1"></div>
+          <button class="btn btn-sm" id="btnFechamento" data-tooltip="Conta as aulas de cada turma num período que você escolhe, para conferir pagamento"><svg><use href="#i-check"/></svg>Fechamento por turma</button>
           <button class="btn btn-sm" id="btnDiagIA" data-tooltip="Gera um parecer escrito a partir dos seus números"><svg><use href="#i-ia"/></svg>Parecer com IA</button>
           <button class="btn btn-sm" id="btnExpRel"><svg><use href="#i-baixar"/></svg>Exportar relatório</button>
         </div>
@@ -5380,6 +5395,130 @@ function agregarTurmas(ini,fim){
   });
   return [...m.values()].sort((a,b)=>b.min-a.min);
 }
+/* ==========================================================================
+   FECHAMENTO POR TURMA
+   Conta as aulas de cada turma num período que o professor escolhe, para
+   conferir pagamento. Um encontro atendido por duas turmas conta uma vez
+   em cada uma, e o número de execuções aparece à parte.
+   ========================================================================== */
+function turmasDoEvento(ev){
+  const t=(ev.turma||ev.curso||'').trim();
+  if(!t) return ['Sem turma'];
+  /* "PC BA Escrivão / PC BA Investigador" são duas turmas no mesmo encontro.
+     Só divide quando há espaço dos dois lados da barra, para não quebrar
+     nomes legítimos como "3º A/B". */
+  const p=t.split(/\s+\/\s+/).map(s=>s.trim()).filter(Boolean);
+  return p.length ? p : [t];
+}
+function jaOcorreu(dISO, fimHM){
+  const hj=iso(new Date());
+  if(dISO<hj) return true;
+  if(dISO>hj) return false;
+  return hm2min(fimHM||'23:59')<=nowMin();
+}
+function fechamentoTurmas(iniISO, fimISO){
+  const m=new Map(); const aConfirmar=[];
+  const ocs=ocorrenciasIntervalo(pISO(iniISO), pISO(fimISO)).filter(o=>!inativa(o));
+  ocs.forEach(o=>{
+    const passou=jaOcorreu(o.dia, min2hm(o.fimMin));
+    const pendentePassada = passou && o.status!=='feito' && o.status!=='faltou';
+    if(pendentePassada) aConfirmar.push({ev:o.ev.id, dia:o.dia});
+    turmasDoEvento(o.ev).forEach(nome=>{
+      if(!m.has(nome)) m.set(nome,{turma:nome, dadas:0, faltas:0, confirmar:0, futuras:0, minDadas:0, minTot:0});
+      const x=m.get(nome);
+      x.minTot+=o.dur;
+      if(o.status==='feito'){ x.dadas++; x.minDadas+=o.dur; }
+      else if(o.status==='faltou') x.faltas++;
+      else if(passou) x.confirmar++;
+      else x.futuras++;
+    });
+  });
+  return {linhas:[...m.values()].sort((a,b)=>(b.dadas+b.confirmar)-(a.dadas+a.confirmar)||b.minTot-a.minTot),
+          encontros:ocs.length, aConfirmar};
+}
+let fechIni='', fechFim='';
+function intervaloDosCompromissos(){
+  const ds=S.eventos.filter(e=>!e.arquivado && e.recorrencia==='unica' && e.data).map(e=>e.data).sort();
+  const hj=iso(new Date());
+  if(!ds.length) return [hj,hj];
+  return [ds[0], ds[ds.length-1]];
+}
+function modalFechamento(){
+  if(!fechIni || !fechFim){ const r=intervaloDosCompromissos(); fechIni=r[0]; fechFim=r[1]; }
+  abrirModal(`<div class="modal-h"><h3>Fechamento por turma</h3><button class="x-btn" onclick="fecharModal()"><svg style="width:15px;height:15px"><use href="#i-x"/></svg></button></div>
+  <div class="modal-b">
+    <p style="margin:0 0 12px;font-size:12.5px;color:var(--muted);line-height:1.6">
+      Quantas aulas cada turma teve no período. Quando um encontro atende duas turmas, ele conta uma vez em cada,
+      que é como o cursinho paga. O número de encontros efetivos aparece no rodapé.
+    </p>
+    <div class="fech-datas">
+      <div><span class="fd-lbl">De</span>${campoData('fechDe', fechIni, {estilo:'width:150px'})}</div>
+      <div><span class="fd-lbl">Até</span>${campoData('fechAte', fechFim, {estilo:'width:150px'})}</div>
+      <button class="btn btn-sm" id="fechTudo"><svg><use href="#i-volta"/></svg>Todo o período</button>
+    </div>
+    <div id="fechCorpo"></div>
+  </div>
+  <div class="modal-f"><div class="sp"></div><button class="btn btn-fechar" onclick="fecharModal()">Fechar Formulário</button></div>`,'wide');
+  const rel=()=>{ const a=$('#fechDe'), b=$('#fechAte');
+    if(a&&a.value) fechIni=a.value; if(b&&b.value) fechFim=b.value; desenharFechamento(); };
+  const a=$('#fechDe'), b=$('#fechAte');
+  if(a) a.onchange=rel; if(b) b.onchange=rel;
+  $('#fechTudo').onclick=()=>{ const r=intervaloDosCompromissos(); fechIni=r[0]; fechFim=r[1];
+    if($('#fechDe')) $('#fechDe').value=fechIni; if($('#fechAte')) $('#fechAte').value=fechFim; desenharFechamento(); };
+  desenharFechamento();
+}
+function desenharFechamento(){
+  const cx=$('#fechCorpo'); if(!cx) return;
+  if(fechFim<fechIni){ cx.innerHTML=`<div class="vazio"><h4>Datas invertidas</h4><p>A data final está antes da inicial.</p></div>`; return; }
+  const f=fechamentoTurmas(fechIni, fechFim);
+  if(!f.linhas.length){
+    cx.innerHTML=`<div class="vazio"><svg><use href="#i-livro"/></svg><h4>Nenhuma aula neste período</h4>
+      <p>Mude as datas acima ou use o botão Todo o período.</p></div>`;
+    return;
+  }
+  const T={dadas:0,confirmar:0,faltas:0,futuras:0,minDadas:0,minTot:0};
+  f.linhas.forEach(l=>{ for(const k in T) T[k]+=l[k]; });
+  const lin=l=>`<tr>
+      <td class="fech-turma">${esc(l.turma)}</td>
+      <td class="num"><b>${l.dadas}</b></td>
+      <td class="num ${l.confirmar?'fech-pend':''}">${l.confirmar||'0'}</td>
+      <td class="num">${l.faltas||'0'}</td>
+      <td class="num">${l.futuras||'0'}</td>
+      <td class="num">${fmtDur(l.minDadas)}</td>
+      <td class="num">${fmtDur(l.minTot)}</td></tr>`;
+  cx.innerHTML=`<div style="overflow-x:auto">
+    <table class="tbl fech-tbl"><thead><tr>
+      <th>Turma</th><th class="num">Dadas</th><th class="num">A confirmar</th><th class="num">Faltas</th>
+      <th class="num">Futuras</th><th class="num">Horas dadas</th><th class="num">Horas totais</th>
+    </tr></thead><tbody>
+      ${f.linhas.map(lin).join('')}
+      <tr class="fech-tot"><td>Total</td><td class="num">${T.dadas}</td><td class="num">${T.confirmar}</td>
+        <td class="num">${T.faltas}</td><td class="num">${T.futuras}</td>
+        <td class="num">${fmtDur(T.minDadas)}</td><td class="num">${fmtDur(T.minTot)}</td></tr>
+    </tbody></table></div>
+    <div class="fech-rodape">
+      <span>${f.encontros} ${plural(f.encontros,'encontro efetivo','encontros efetivos')} no período, contando uma vez cada aula comum.</span>
+      ${f.aConfirmar.length?`<button class="btn btn-p btn-sm" id="fechMarcar"><svg><use href="#i-check"/></svg>Marcar como dadas as ${f.aConfirmar.length} que já passaram</button>`:''}
+    </div>`;
+  const bt=$('#fechMarcar');
+  if(bt) bt.onclick=()=>marcarPassadasComoDadas(f.aConfirmar);
+}
+/* marca de uma vez as aulas que já aconteceram e continuam sem confirmação */
+function marcarPassadasComoDadas(lista){
+  const feitas=[];
+  (lista||[]).forEach(({ev,dia})=>{
+    const k=chaveOc(ev,dia);
+    if(!S.ocorrencias[k] || !S.ocorrencias[k].status){
+      S.ocorrencias[k]={status:'feito', em:Date.now()};
+      feitas.push(k);
+    }
+  });
+  if(!feitas.length){ toast('info','Nada a marcar','Todas as aulas que já passaram neste período já estão confirmadas.'); return; }
+  salvar(); renderTudo(); desenharFechamento();
+  toast('ok',`${feitas.length} ${plural(feitas.length,'aula marcada','aulas marcadas')} como dada`,
+    'Se alguma não aconteceu, abra o dia e desmarque.',
+    {rotulo:'Desfazer', fn:()=>{ feitas.forEach(k=>{ delete S.ocorrencias[k]; }); salvar(); renderTudo(); desenharFechamento(); }});
+}
 function agregarDisciplinas(ini,fim){
   const m={};
   ocorrenciasIntervalo(ini,fim).filter(o=>!inativa(o)).forEach(o=>{
@@ -6956,6 +7095,7 @@ function mostrarRevisao(aulas, nomeArq){
       <button class="btn btn-danger" id="btnDescartar">Descartar</button>
       <div style="flex:1"></div>
       <label class="switch"><input type="checkbox" id="revSubstituir"><span class="tr"></span><span class="t">Substituir as aulas já existentes</span></label>
+      ${temData?`<label class="switch"><input type="checkbox" id="revPassadas"><span class="tr"></span><span class="t" data-tooltip="Vale para as aulas cuja data e horário já passaram. Dá para desmarcar depois, uma a uma.">Já marcar como dadas as que passaram</span></label>`:''}
     </div></div>`;
   desenharRevisao();
   $('#btnGravarGrade').onclick=gravarGrade;
@@ -7117,17 +7257,25 @@ function gravarGrade(){
   const inst=($('#impInst').value||'').trim(), turma=($('#impCurso').value||'').trim(), modPad=$('#impMod').value||'';
   S.config.mostrarProfessor=!!$('#impVerProf').checked;
   /* agrupa aulas idênticas em dias diferentes num único evento recorrente */
-  const mapa={}; let nData=0;
+  const marcarPassadas = !!($('#revPassadas') && $('#revPassadas').checked);
+  const mapa={}; let nData=0, nMarcadas=0;
   sel.filter(a=>a.data).forEach(a=>{
     const disc=(a.disciplina||a.titulo||'Aula').trim();
     if(!S.disciplinas.some(x=>x.nome.toLowerCase()===disc.toLowerCase()))
       S.disciplinas.push({nome:disc, cor:PALETA[S.disciplinas.length%PALETA.length]});
+    const idNovo=uid();
     S.eventos.push({
-      id:uid(), titulo:disc, tipo:a.tipo||'aula', disciplina:disc, professor:(a.professor||'').trim(), local:(a.local||'').trim(),
+      id:idNovo, titulo:disc, tipo:a.tipo||'aula', disciplina:disc, professor:(a.professor||'').trim(), local:(a.local||'').trim(),
       modalidade:a.modalidade||modPad, instituicao:inst, turma:(a.turma||'').trim()||turma,
       prioridade:2, recorrencia:'unica', dias:[], data:a.data, inicio:a.inicio, fim:a.fim,
       vigIni:'', vigFim:'', cor:'', obs:(a.obs||'').trim(), avisos:[15], criadoEm:Date.now(), excecoes:[]
     });
+    /* importação de agenda antiga: sem isto, dezenas de aulas já ocorridas
+       ficam pendentes para sempre e o fechamento por turma vem zerado */
+    if(marcarPassadas && jaOcorreu(a.data, a.fim)){
+      S.ocorrencias[chaveOc(idNovo, a.data)]={status:'feito', em:Date.now()};
+      nMarcadas++;
+    }
     nData++;
   });
   sel.filter(a=>!a.data).forEach(a=>{
@@ -7157,6 +7305,7 @@ function gravarGrade(){
   $('#btnLerIA').disabled=true; $('#btnLerArquivo').disabled=true; $('#btnLerArquivo').innerHTML='<svg><use href="#i-raio"/></svg>Ler grade';
   const partes=[];
   if(nData) partes.push(`${nData} em datas específicas`);
+  if(nMarcadas) partes.push(`${nMarcadas} já marcadas como dadas`);
   if(n) partes.push(`${n} ${n===1?'bloco recorrente':'blocos recorrentes'}`);
   toast('ok',`${sel.length} ${plural(sel.length,'aula gravada','aulas gravadas')}`, partes.join(' · ')+'. Confira na visão Semana.');
   if(nData){ const prim=sel.filter(a=>a.data).map(a=>a.data).sort()[0]; if(prim) refSemana=inicioSemana(pISO(prim)); }
@@ -8597,6 +8746,7 @@ const COMANDOS=[
   {t:'Novo compromisso', ic:'i-mais', k:'N', fn:()=>modalEvento()},
   {t:'Nova meta', ic:'i-metas', k:'', fn:()=>modalMeta()},
   {t:'Colar grade em texto', ic:'i-copia', k:'', fn:()=>modalColarTexto()},
+  {t:'Fechamento por turma', ic:'i-check', k:'', fn:()=>modalFechamento()},
   {t:'Exportar backup', ic:'i-baixar', k:'', fn:()=>exportarJson()},
   {t:'Exportar .ics', ic:'i-arquivo', k:'', fn:()=>exportarIcs()},
   {t:'Alternar tema', ic:'i-lua', k:'', fn:()=>alternarTema()},
@@ -8719,6 +8869,7 @@ function iniciar(){
   $('#btnColarTexto').onclick=modalColarTexto;
   /* análise */
   $$('#segPeriodo button').forEach(b=>b.onclick=()=>{ anPeriodo=b.dataset.p; anOffset=0; renderAnalise(); });
+  $('#btnFechamento').onclick=modalFechamento;
   $('#perAnt').onclick=()=>{ anOffset--; renderAnalise(); };
   $('#perProx').onclick=()=>{ if(anOffset<0){ anOffset++; renderAnalise(); } };
   $('#btnDiagIA').onclick=parecerIA;
