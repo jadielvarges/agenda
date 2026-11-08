@@ -253,6 +253,35 @@ html[data-tema="claro"] .chip.on{background:rgba(242,193,78,.24);border-color:#D
 .fech-tbl td.num b{font-size:14px;color:var(--text)}
 .fech-turma{min-width:190px;line-height:1.4}
 .fech-pend{color:var(--gold);font-weight:600}
+.mt-ponto{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px;vertical-align:middle;flex:none}
+/* dia sem aula na grade do Estado */
+.fl-sem{padding:18px 14px;text-align:center}
+.fs-tag{display:inline-block;padding:4px 12px;border-radius:999px;border:1px solid var(--line-strong);
+  font-family:var(--ff-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}
+.fl-sem p{margin:10px 0 13px;font-size:12.5px;color:var(--muted);line-height:1.6}
+.fl-liberar{display:block;width:100%;margin-top:12px;padding:9px 12px;border:1px dashed var(--line-strong);
+  border-radius:10px;background:transparent;color:var(--muted);font-family:inherit;font-size:12px;
+  cursor:pointer;transition:all var(--dur)}
+.fl-liberar:hover{border-color:var(--gold);color:var(--text-2)}
+.sa-motivos{display:flex;gap:7px;flex-wrap:wrap}
+/* escolha de agendas do Google */
+.gc-ler{margin-top:14px;padding-top:13px;border-top:1px solid var(--line)}
+.gc-ler-h{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.gc-ler-h b{font-size:13px;color:var(--text-2)}
+.gc-cal{display:flex;align-items:center;gap:9px;padding:6px 0;cursor:pointer;font-size:12.5px;color:var(--text-2)}
+.gc-cal input{flex:none}
+.gc-cal input:disabled+.gc-bola+.gc-nome{color:var(--faint)}
+.gc-bola{width:10px;height:10px;border-radius:50%;flex:none}
+.gc-nome{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* escolha quando dois compromissos batem */
+.ch-lista{display:flex;flex-direction:column;gap:7px}
+.ch-item,.ch-novo{display:flex;align-items:center;gap:11px;padding:11px 13px;border:1px solid var(--line);border-radius:11px;background:var(--surface-2)}
+.ch-novo{margin-top:11px;border-style:dashed;border-color:var(--gold-dim)}
+.ch-cor{width:4px;align-self:stretch;border-radius:3px;flex:none}
+.ch-tag{font-family:var(--ff-mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);flex:none}
+.ch-txt{display:flex;flex-direction:column;gap:2px;min-width:0}
+.ch-txt b{font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ch-txt span{font-size:11.5px;color:var(--muted)}
 .fech-tot td{border-top:1.5px solid var(--line-strong);font-weight:600;color:var(--text-2)}
 .fech-rodape{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:13px;
   font-size:12px;color:var(--muted);line-height:1.5}
@@ -1707,6 +1736,7 @@ html.trocando-tema::view-transition-new(root){ animation:tema-revela var(--t-4) 
           <div class="mes-grid" id="mesGrid" style="margin-top:6px"></div>
         </div>
         <div class="grid g4" style="margin-top:14px" id="mesKpis"></div>
+        <div id="mesTurmas" style="margin-top:14px"></div>
       </section>
 
       <!-- ============ VIEW: COMPROMISSOS ============ -->
@@ -3259,6 +3289,7 @@ function migrarRastros(){
 let saveTimer=null;
 function salvar(imediato){
   clearTimeout(saveTimer);
+  _cacheTurmas=null;
   const go=()=>{ try{ localStorage.setItem(LS_KEY, JSON.stringify(S)); }catch(e){ toast('err','Não foi possível gravar','O armazenamento do navegador está cheio ou bloqueado.'); }
     if(typeof nuvAgendar==='function') nuvAgendar();
     if(typeof gcAgendar==='function') gcAgendar(); };
@@ -3353,7 +3384,40 @@ function corDisciplina(nome){
 /* neutro adaptativo: preto no tema claro, grafite claro no escuro */
 function corNeutro(){ return document.documentElement.getAttribute('data-tema')==='claro' ? '#15181F' : '#C6CBD9'; }
 function resolveCor(c){ return c==='neutro' ? corNeutro() : c; }
-function corEvento(ev){ return resolveCor(ev.cor || corDisciplina(ev.disciplina) || (TIPOS[ev.tipo]||TIPOS.aula).c); }
+/* ===== cor por turma =====
+   Duas turmas diferentes nunca podem sair da mesma cor, mesmo tendo a mesma
+   disciplina: PC BA Presencial e PC BA Ao Vivo sao turmas distintas e entram
+   em contagens distintas. A cor segue a turma; o professor pode trocar a cor
+   de cada turma em Ajustes. */
+let _cacheTurmas=null;
+function limparCacheTurmas(){ _cacheTurmas=null; }
+function listaTurmasCor(){
+  if(_cacheTurmas) return _cacheTurmas;
+  const s=new Set();
+  (S.eventos||[]).forEach(e=>{ if(e.arquivado) return;
+    const t=(e.turma||e.curso||'').trim(); if(t) s.add(t); });
+  _cacheTurmas=[...s].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  return _cacheTurmas;
+}
+function corDaTurma(nome){
+  const t=String(nome||'').trim(); if(!t) return null;
+  S.turmasCor=S.turmasCor||{};
+  if(S.turmasCor[t]) return S.turmasCor[t];
+  const lista=listaTurmasCor();
+  let i=lista.indexOf(t);
+  /* "PC BA Escrivão" sozinho vem da divisão da aula comum: herda a cor do
+     encontro em que aparece, senão a tabela sairia toda cinza */
+  if(i<0) i=lista.findIndex(x=>turmasDoEvento({turma:x}).indexOf(t)>=0);
+  if(i<0) return null;
+  return S.turmasCor[lista[i]] || PALETA[i%PALETA.length];
+}
+function corEvento(ev){
+  const porTurma = (S.config && S.config.corPor!=='disciplina');
+  const base = porTurma
+    ? (corDaTurma(ev.turma||ev.curso) || corDisciplina(ev.disciplina))
+    : (corDisciplina(ev.disciplina) || corDaTurma(ev.turma||ev.curso));
+  return resolveCor(ev.cor || base || (TIPOS[ev.tipo]||TIPOS.aula).c);
+}
 function chaveOc(evId,dia){ return evId+'|'+dia; }
 function statusOc(evId,dia){ const o=S.ocorrencias[chaveOc(evId,dia)]; return o&&o.status ? o.status : 'pendente'; }
 
@@ -3571,9 +3635,179 @@ function aulaEstadoOcorreu(dISO, a){
   if(dISO>hj) return false;
   return hm2min(a.fim)<=nowMin();
 }
+/* ---------- dias sem aula na grade do Estado ----------
+   Feriado, ponto facultativo, aula suspensa, dispensa. Enquanto o dia é
+   letivo, as faixas do CENE ficam bloqueadas e nada pode ser agendado em
+   cima. Marcado o dia como sem aula, a carga daquele dia zera e os horários
+   ficam livres para outros compromissos.
+   e.semAula = { 'AAAA-MM-DD': {motivo, em} }                              */
+const MOTIVOS_SEM_AULA = ['Feriado nacional','Feriado estadual','Feriado municipal','Ponto facultativo',
+  'Aula suspensa','Dispensa','Recesso','Paralisação','Outro'];
+function semAulaEstado(dISO){
+  const e=estado(); e.semAula=e.semAula||{};
+  return e.semAula[dISO]||null;
+}
+function definirSemAula(dISO, motivo){
+  const e=estado(); e.semAula=e.semAula||{};
+  if(motivo){
+    e.semAula[dISO]={motivo, em:Date.now()};
+    /* um dia sem aula não pode continuar com faixas marcadas como dadas */
+    if(e.feitos && e.feitos[dISO]) delete e.feitos[dISO];
+  }else{
+    delete e.semAula[dISO];
+  }
+  salvar(true); renderTudo();
+}
+/* a faixa do CENE que colide com um horário, ou null se estiver livre */
+function choqueComEstado(dISO, iniMin, fimMin){
+  if(!dISO || semAulaEstado(dISO)) return null;
+  const l=aulasEstado(dISO); if(!l) return null;
+  for(const a of l){
+    if(!a.turma) continue;
+    const i=hm2min(a.hora), f=hm2min(a.fim);
+    if(iniMin < f && i < fimMin) return a;
+  }
+  return null;
+}
+/* todos os choques de um compromisso, considerando recorrência e vigência */
+function choquesDoEvento(obj){
+  const iniMin=hm2min(obj.inicio), fimMin=hm2min(obj.fim), achados=[];
+  if(obj.recorrencia==='semanal'){
+    /* basta uma data de amostra por dia da semana: a grade do Estado é igual
+       toda semana, e o que muda de data para data é só o dia sem aula */
+    const base=pISO(obj.vigIni || iso(new Date()));
+    (obj.dias||[]).forEach(d=>{
+      let dt=new Date(base);
+      for(let k=0;k<7;k++){ if(dt.getDay()===d) break; dt=addDias(dt,1); }
+      const c=choqueComEstado(iso(dt), iniMin, fimMin);
+      if(c) achados.push({dia:iso(dt), aula:c});
+    });
+  }else if(obj.data){
+    const c=choqueComEstado(obj.data, iniMin, fimMin);
+    if(c) achados.push({dia:obj.data, aula:c});
+  }
+  return achados;
+}
+function modalSemAula(dISO){
+  const d=pISO(dISO);
+  abrirModal(`<div class="modal-h"><h3>Não houve aula em ${esc(fmtData(d))}</h3>
+    <button class="x-btn" onclick="fecharModal()"><svg style="width:15px;height:15px"><use href="#i-x"/></svg></button></div>
+  <div class="modal-b">
+    <p style="margin:0 0 13px;font-size:12.5px;color:var(--muted);line-height:1.6">
+      As faixas do ${esc(estado().nome||'CENE')} deixam de contar na carga deste dia e os horários ficam livres
+      para você agendar outra coisa. Dá para desfazer quando quiser.
+    </p>
+    <label class="f-lbl">Motivo</label>
+    <div id="saMotivos" class="sa-motivos">${MOTIVOS_SEM_AULA.map((m,i)=>
+      `<button type="button" class="chip ${i===0?'on':''}" data-m="${esc(m)}">${esc(m)}</button>`).join('')}</div>
+  </div>
+  <div class="modal-f"><div class="sp"></div>
+    <button class="btn btn-fechar" onclick="fecharModal()">Fechar Formulário</button>
+    <button class="btn btn-p" id="saOk"><svg><use href="#i-check"/></svg>Confirmar</button></div>`);
+  let escolhido=MOTIVOS_SEM_AULA[0];
+  $$('#saMotivos button').forEach(b=>b.onclick=()=>{
+    $$('#saMotivos button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); escolhido=b.dataset.m;
+  });
+  $('#saOk').onclick=()=>{
+    definirSemAula(dISO, escolhido);
+    fecharModal();
+    toast('ok','Dia liberado',`${escolhido} em ${fmtCurto(pISO(dISO))}. Os horários do ${estado().nome||'CENE'} ficaram livres neste dia.`);
+  };
+}
+/* datas de amostra: para um bloco semanal basta uma data por dia da semana */
+function datasDeAmostra(obj){
+  if(obj.recorrencia==='semanal'){
+    const base=pISO(obj.vigIni || iso(new Date())), out=[];
+    (obj.dias||[]).forEach(d=>{
+      let dt=new Date(base);
+      for(let k=0;k<7;k++){ if(dt.getDay()===d) break; dt=addDias(dt,1); }
+      out.push(iso(dt));
+    });
+    return out;
+  }
+  return obj.data ? [obj.data] : [];
+}
+/* compromissos da própria agenda que ocupam o mesmo horário */
+function eventosQueChocam(obj, idIgnorar){
+  const iniMin=hm2min(obj.inicio), fimMin=hm2min(obj.fim), achados=[];
+  datasDeAmostra(obj).forEach(dISO=>{
+    ocorrenciasDoDia(dISO).forEach(o=>{
+      if(o.ev.id===idIgnorar || o.ev.id===obj.id) return;
+      if(inativa(o)) return;
+      if(o.iniMin<fimMin && iniMin<o.fimMin) achados.push({dia:dISO, oc:o});
+    });
+  });
+  return achados;
+}
+function choquesExternos(obj){
+  const iniMin=hm2min(obj.inicio), fimMin=hm2min(obj.fim);
+  for(const dISO of datasDeAmostra(obj)){
+    const e=choqueComEstado(dISO, iniMin, fimMin);
+    if(e) return {tipo:'estado', dia:dISO, aula:e};
+    const g=choqueComGoogle(dISO, iniMin, fimMin);
+    if(g) return {tipo:'google', dia:dISO, ev:g};
+  }
+  return null;
+}
+function avisarChoqueExterno(c){
+  if(c.tipo==='estado'){
+    toast('err','Horário ocupado pela grade do Estado',
+      `${esc(c.aula.turma)} das ${c.aula.hora} às ${c.aula.fim}. Se naquele dia não houver aula, marque o motivo no cartão do ${esc(estado().nome||'CENE')} e o horário fica livre.`);
+  }else{
+    toast('err','Horário ocupado na sua agenda do Google',
+      `${esc(c.ev.titulo)} das ${min2hm(c.ev.ini)} às ${min2hm(c.ev.fim)} em ${esc(fmtCurto(pISO(c.dia)))}. Mude o horário aqui ou apague o compromisso lá no Google.`);
+  }
+}
+/* nada de dois compromissos no mesmo horário: o professor escolhe qual fica */
+function modalChoqueAgenda(obj, choques, seguir){
+  const lista=choques.map(c=>`<div class="ch-item">
+      <span class="ch-cor" style="background:${esc(c.oc.cor)}"></span>
+      <div class="ch-txt"><b>${esc(c.oc.ev.titulo)}</b>
+        <span>${esc(fmtCurto(pISO(c.dia)))} · ${min2hm(c.oc.iniMin)} às ${min2hm(c.oc.fimMin)}${c.oc.ev.turma?' · '+esc(c.oc.ev.turma):''}</span></div>
+    </div>`).join('');
+  const n=choques.length;
+  abrirModal(`<div class="modal-h"><h3>Já existe compromisso nesse horário</h3>
+    <button class="x-btn" onclick="fecharModal()"><svg style="width:15px;height:15px"><use href="#i-x"/></svg></button></div>
+  <div class="modal-b">
+    <p style="margin:0 0 12px;font-size:12.5px;color:var(--muted);line-height:1.6">
+      O que você está gravando bate com ${n===1?'este compromisso':`estes ${n} compromissos`}. Escolha qual fica.
+    </p>
+    <div class="ch-lista">${lista}</div>
+    <div class="ch-novo">
+      <span class="ch-tag">O novo</span>
+      <div class="ch-txt"><b>${esc(obj.titulo)}</b>
+        <span>${obj.recorrencia==='semanal'?esc((obj.dias||[]).map(d=>DIAS_C[d]).join(', ')):esc(fmtCurto(pISO(obj.data)))} · ${esc(obj.inicio)} às ${esc(obj.fim)}</span></div>
+    </div>
+  </div>
+  <div class="modal-f"><div class="sp"></div>
+    <button class="btn btn-fechar" onclick="fecharModal()">Fechar Formulário</button>
+    <button class="btn" id="chManter">Manter o que já está</button>
+    <button class="btn btn-p" id="chTrocar"><svg><use href="#i-check"/></svg>Trocar pelo novo</button></div>`,'wide');
+  $('#chManter').onclick=()=>{ fecharModal();
+    toast('','Nada foi alterado',`${esc(choques[0].oc.ev.titulo)} continua no horário.`); };
+  $('#chTrocar').onclick=()=>{
+    const ids=[...new Set(choques.map(c=>c.oc.ev.id))];
+    const apagados=[];
+    ids.forEach(idv=>{
+      const i=S.eventos.findIndex(e=>e.id===idv);
+      if(i>=0){ apagados.push(S.eventos[i]); S.lixeira.unshift({ev:S.eventos[i], quando:Date.now()}); S.eventos.splice(i,1); }
+    });
+    seguir(true);
+    toast('ok','Compromisso trocado',
+      `${apagados.length} ${plural(apagados.length,'compromisso foi','compromissos foram')} para a lixeira e ${esc(obj.titulo)} ficou no horário.`,
+      {rotulo:'Desfazer', fn:()=>{
+        const i=S.eventos.findIndex(e=>e.id===obj.id); if(i>=0) S.eventos.splice(i,1);
+        apagados.forEach(e=>{ S.eventos.push(e); S.lixeira=S.lixeira.filter(x=>x.ev.id!==e.id); });
+        salvar(true); renderTudo();
+      }});
+  };
+}
 function alternarAulaEstado(dISO, i){
   const e=estado(); e.feitos=e.feitos||{};
   const l=aulasEstado(dISO); if(!l||!l[i]||!l[i].turma) return;
+  const sa=semAulaEstado(dISO);
+  if(sa){ toast('','Dia sem aula',`Este dia está marcado como ${sa.motivo.toLowerCase()}. Desfaça isso no cartão do CENE para voltar a marcar aulas.`); return; }
   const jaMarcada=(e.feitos[dISO]||[]).includes(i);
   if(!jaMarcada && !aulaEstadoOcorreu(dISO,l[i])){
     toast('','Ainda não deu o horário',`Esta aula termina às ${l[i].fim}. Marque como dada depois disso.`);
@@ -3589,7 +3823,9 @@ function alternarAulaEstado(dISO, i){
 /* minutos previstos e cumpridos da grade do Estado num dia */
 function cargaEstadoDia(dISO){
   const l=aulasEstado(dISO);
-  if(!l) return {prev:0, feito:0, qtd:0, qtdFeito:0};
+  if(!l) return {prev:0, feito:0, qtd:0, qtdFeito:0, venc:0};
+  /* feriado ou aula suspensa: o dia não gera carga nem cobra marcação */
+  if(semAulaEstado(dISO)) return {prev:0, feito:0, qtd:0, qtdFeito:0, venc:0};
   const fe=new Set(feitosEstado(dISO));
   const hj=iso(new Date()), agora=nowMin();
   let prev=0, feito=0, qtd=0, qtdFeito=0, venc=0;
@@ -3674,8 +3910,16 @@ function renderFoco(){
 
   const d=pISO(focoDia);
   const l=aulasEstado(focoDia);
+  const sa=semAulaEstado(focoDia);
   let corpo='';
-  if(!l){ corpo=`<div class="fl-vazio">Sem aulas ${focoDia===hjISO?'hoje':'neste dia'}</div>`; }
+  if(sa){
+    corpo=`<div class="fl-sem">
+      <div class="fs-tag">${esc(sa.motivo)}</div>
+      <p>Não há aula neste dia. Os horários ficam livres para agendar outra coisa e nada é cobrado na carga.</p>
+      <button type="button" class="btn btn-sm" onclick="definirSemAula('${focoDia}','')"><svg><use href="#i-volta"/></svg>Voltar a ter aula</button>
+    </div>`;
+  }
+  else if(!l){ corpo=`<div class="fl-vazio">Sem aulas ${focoDia===hjISO?'hoje':'neste dia'}</div>`; }
   else{
     let virou=false;
     const fe=new Set(feitosEstado(focoDia));
@@ -3699,9 +3943,14 @@ function renderFoco(){
   const todas=[...new Set([].concat(...[0,1,2,3,4,5,6].map(w=>e.grade[w]||[])).map(x=>(x||'').trim()).filter(Boolean))];
   const regua = todas.length ? `<div class="fl-medida" aria-hidden="true">${todas.map(t=>
     `<div class="fl-linha"><span class="hh mono">00:00 - 00:00</span><span class="pipe">|</span><span class="tt">${esc(t)}</span><span class="fl-ok"><svg><use href="#i-check"/></svg></span></div>`).join('')}</div>` : '';
+  const temGrade = !!(l && l.some(a=>a.turma));
+  const rodape = (!sa && temGrade)
+    ? `<button type="button" class="fl-liberar" onclick="modalSemAula('${focoDia}')"
+         data-tooltip="Feriado, aula suspensa ou dispensa: libera os horários deste dia">Não houve aula neste dia</button>`
+    : '';
   $('#focoLista').innerHTML=`
     <div class="fl-h">${String(d.getDate()).padStart(2,'0')} DE ${MESES[d.getMonth()].slice(0,3).toUpperCase()}.</div>
-    ${regua}${corpo}`;
+    ${regua}${corpo}${rodape}`;
   const b=$('#btnGradeEstado'); if(b) b.onclick=modalGradeEstado;
   ligarOrdemMarcas();
 }
@@ -4345,6 +4594,16 @@ function soltarResize(e){
   const r=rez, fim=rez.novoFim;
   fimResize();
   if(fim==null || fim===r.fimMin) return renderSemana();
+  const cExt=choquesExternos({recorrencia:'unica', data:r.dia, inicio:min2hm(r.iniMin), fim:min2hm(fim)});
+  if(cExt){ renderSemana(); avisarChoqueExterno(cExt); return; }
+  const dup=eventosQueChocam({id:r.ev.id, recorrencia:'unica', data:r.dia,
+    inicio:min2hm(r.iniMin), fim:min2hm(fim)}, r.ev.id);
+  if(dup.length){
+    renderSemana();
+    toast('err','Esticar até aí invade outro compromisso',
+      `${esc(dup[0].oc.ev.titulo)} começa às ${min2hm(dup[0].oc.iniMin)}.`);
+    return;
+  }
   const antes={inicio:r.ev.inicio, fim:r.ev.fim};
   r.ev.fim=min2hm(fim);
   salvar(true); renderTudo();
@@ -4515,6 +4774,17 @@ function soltarArrasto(e){
   const alvo=a.alvo;
   limparArrasto();
   if(!alvo || (alvo.dia===a.dia && alvo.min===a.iniMin)) { renderSemana(); return; }
+  const cExt=choquesExternos({recorrencia:'unica', data:alvo.dia,
+    inicio:min2hm(alvo.min), fim:min2hm(alvo.min+a.dur)});
+  if(cExt){ renderSemana(); avisarChoqueExterno(cExt); return; }
+  const dup=eventosQueChocam({id:a.ev.id, recorrencia:'unica', data:alvo.dia,
+    inicio:min2hm(alvo.min), fim:min2hm(alvo.min+a.dur)}, a.ev.id);
+  if(dup.length){
+    renderSemana();
+    toast('err','Já existe compromisso nesse horário',
+      `${esc(dup[0].oc.ev.titulo)} das ${min2hm(dup[0].oc.iniMin)} às ${min2hm(dup[0].oc.fimMin)}. Para trocar um pelo outro, abra o compromisso e grave no horário novo.`);
+    return;
+  }
   aplicarArrasto(a, alvo);
 }
 function cancelarArrasto(){ limparArrasto(); renderSemana(); }
@@ -4924,6 +5194,43 @@ function renderMes(){
       `${okMes} ${okMes===1?'concluído':'concluídos'} · ${(n=>n+' '+plural(n,'falta','faltas'))(its.filter(o=>o.status==='faltou').length)}`, 'var(--menta)') +
     kpi('Dia mais cheio', maisCheio?fmtCurto(pISO(maisCheio[0])):'sem carga',
         maisCheio?fmtDur(maisCheio[1])+' de carga':'nada no mês', 'var(--lilas)');
+  renderMesTurmas(new Date(refMes.getFullYear(), refMes.getMonth(), 1), fimMes);
+}
+/* aulas ministradas no mês, turma por turma: é esse número que fecha com o
+   cursinho. Cancelada e transferida não entram; o que passou e ainda não foi
+   marcado aparece à parte, para o professor não fechar o mês por engano. */
+function renderMesTurmas(iniMes, fimMes){
+  const cx=$('#mesTurmas'); if(!cx) return;
+  const f=fechamentoTurmas(iso(iniMes), iso(fimMes));
+  const comAula=f.linhas.filter(l=>l.dadas||l.confirmar||l.futuras||l.faltas);
+  if(!comAula.length){ cx.innerHTML=''; return; }
+  const porInst=new Map();
+  (S.eventos||[]).forEach(e=>{ const t=(e.turma||e.curso||'').trim();
+    turmasDoEvento(e).forEach(n=>{ if(!porInst.has(n)) porInst.set(n,(e.instituicao||'').trim()); }); });
+  const insts=[...new Set(comAula.map(l=>porInst.get(l.turma)||'').filter(Boolean))];
+  const T=comAula.reduce((a,l)=>({dadas:a.dadas+l.dadas, confirmar:a.confirmar+l.confirmar,
+    futuras:a.futuras+l.futuras, min:a.min+l.minDadas}),{dadas:0,confirmar:0,futuras:0,min:0});
+  cx.innerHTML=`<div class="card">
+    <div class="card-h"><svg style="width:16px;height:16px;color:var(--menta)"><use href="#i-check"/></svg>
+      <h3>Aulas ministradas no mês</h3>
+      <span class="eyebrow">${esc(insts.join(' · ')||'por turma')}</span></div>
+    <div style="overflow-x:auto"><table class="tbl fech-tbl"><thead><tr>
+      <th>Turma</th><th class="num">Ministradas</th><th class="num">A confirmar</th>
+      <th class="num">Previstas</th><th class="num">Horas ministradas</th>
+    </tr></thead><tbody>
+    ${comAula.map(l=>`<tr>
+      <td class="fech-turma"><span class="mt-ponto" style="background:${esc(corDaTurma(l.turma)||'var(--faint)')}"></span>${esc(l.turma)}</td>
+      <td class="num"><b>${l.dadas}</b></td>
+      <td class="num ${l.confirmar?'fech-pend':''}">${l.confirmar}</td>
+      <td class="num">${l.dadas+l.confirmar+l.futuras+l.faltas}</td>
+      <td class="num">${fmtDur(l.minDadas)}</td></tr>`).join('')}
+    <tr class="fech-tot"><td>Total</td><td class="num">${T.dadas}</td><td class="num">${T.confirmar}</td>
+      <td class="num">${T.dadas+T.confirmar+T.futuras}</td><td class="num">${fmtDur(T.min)}</td></tr>
+    </tbody></table></div>
+    <div class="fech-rodape">
+      <span>${f.encontros} ${plural(f.encontros,'encontro','encontros')} no mês. A aula comum a duas turmas conta uma vez em cada, que é como o cursinho paga.</span>
+      ${f.aConfirmar.length?`<button class="btn btn-sm" onclick="modalFechamento()"><svg><use href="#i-check"/></svg>Abrir o fechamento</button>`:''}
+    </div></div>`;
 }
 function abrirDia(dISO){
   const d=pISO(dISO), l=ocorrenciasDoDia(dISO);
@@ -5957,6 +6264,11 @@ function salvarEvento(id){
   if(!titulo){ toast('err','Falta o título','Dê um nome ao compromisso para localizá-lo depois.'); $('#evTitulo').focus(); return; }
   if(hm2min(fim)<=hm2min(ini)){ toast('err','Horário inválido','O fim precisa ser maior que o início.'); return; }
   if(rec==='semanal' && !dias.length){ toast('err','Nenhum dia marcado','Escolha ao menos um dia da semana.'); return; }
+  /* a grade do Estado e a agenda do Google são compromissos já assumidos:
+     nada entra por cima deles */
+  const cExt=choquesExternos({recorrencia:rec, dias, data:$('#evData')?$('#evData').value:'',
+    inicio:ini, fim, vigIni:$('#evVigIni')?$('#evVigIni').value:''});
+  if(cExt){ avisarChoqueExterno(cExt); return; }
   const obj={
     id: id||uid(), titulo, tipo:$('#evTipo').value,
     disciplina:$('#evDisc').value.trim(), professor:$('#evProf').value.trim(), local:$('#evLocal').value.trim(),
@@ -5978,12 +6290,18 @@ function salvarEvento(id){
     salvar(true); fecharModal(); renderTudo();
     if(!silencioso) toast('ok', id?'Compromisso atualizado':'Compromisso criado', `${titulo} · ${rec==='semanal'?dias.map(d=>DIAS_C[d]).join(', '):fmtData(pISO(obj.data))} · ${ini}–${fim}`);
   };
-  if(!orig) return gravar();
-  const mud=camposAlterados(orig, obj);
-  if(!mud.length) return gravar();
-  const alc=alcancesEdicao(orig, mud);
-  if(alc.length<2) return gravar();
-  modalEscopoEdicao(orig, obj, mud, alc, gravar);
+  const seguir=(silencioso)=>{
+    if(!orig) return gravar(silencioso);
+    const mud=camposAlterados(orig, obj);
+    if(!mud.length) return gravar(silencioso);
+    const alc=alcancesEdicao(orig, mud);
+    if(alc.length<2) return gravar(silencioso);
+    modalEscopoEdicao(orig, obj, mud, alc, gravar);
+  };
+  /* dois compromissos no mesmo horário nunca ficam juntos: ou um, ou outro */
+  const dup=eventosQueChocam(obj, id);
+  if(dup.length) return modalChoqueAgenda(obj, dup, seguir);
+  return seguir();
 }
 /* campos que fazem sentido propagar para outras aulas */
 const CAMPOS_PROPAG=[
@@ -6230,10 +6548,10 @@ function sugestoesData(ev, dia, ini, fim){
 
 /* ---------- modal ---------- */
 let remCtx=null;
-function modalRemarcar(evId, dia){
+function modalRemarcar(evId, dia, modo){
   const ev=S.eventos.find(e=>e.id===evId); if(!ev) return;
   const o=ocorrenciasDoDia(dia).find(x=>x.ev.id===evId) || instancia(ev,dia);
-  remCtx={evId, dia, ini:ev.inicio, fim:ev.fim, modo:'remarcar', motivo:'', obs:''};
+  remCtx={evId, dia, ini:ev.inicio, fim:ev.fim, modo:(modo==='cancelar'?'cancelar':'remarcar'), motivo:'', obs:''};
   const sug=sugestoesData(ev, dia, ev.inicio, ev.fim);
   abrirModal(`<div class="modal-h">
       <h3>Remarcar aula</h3>
@@ -6525,8 +6843,10 @@ function detalheOcorrencia(evId, dia){
     </div>
     <div class="modal-b">
       <div style="display:flex;gap:8px;margin-bottom:15px;flex-wrap:wrap">
-        <button class="btn btn-sm ${st==='feito'?'btn-p':''}" onclick="marcar('${evId}','${dia}','feito');fecharModal()"><svg><use href="#i-check"/></svg>Concluído</button>
+        <button class="btn btn-sm ${st==='feito'?'btn-p':''}" onclick="marcar('${evId}','${dia}','feito');fecharModal()" data-tooltip="Só as ministradas entram no fechamento por turma"><svg><use href="#i-check"/></svg>${ev.tipo==='aula'?'Ministrada':'Concluído'}</button>
         <button class="btn btn-sm ${st==='faltou'?'btn-danger':''}" onclick="marcar('${evId}','${dia}','faltou');fecharModal()"><svg><use href="#i-x"/></svg>Faltei</button>
+        ${(st==='remarcada'||st==='cancelada')?'':`<button class="btn btn-sm" onclick="fecharModal();modalRemarcar('${evId}','${dia}','cancelar')" data-tooltip="Registra o cancelamento com o motivo; a aula deixa de contar"><svg><use href="#i-x"/></svg>Cancelada</button>`}
+        ${(st==='remarcada'||st==='cancelada')?'':`<button class="btn btn-sm" onclick="fecharModal();modalRemarcar('${evId}','${dia}')" data-tooltip="Transfere para outra data e registra o motivo"><svg><use href="#i-relogio"/></svg>Transferida</button>`}
         <div style="flex:1"></div>
         <span class="pill ${st==='feito'?'ok':st==='faltou'?'no':'pd'}">${st==='feito'?'concluído':st==='faltou'?'falta registrada':st==='remarcada'?'remarcada':st==='cancelada'?'cancelada':st==='transferida'?'transferida':'sem registro'}</span>
       </div>
@@ -7306,6 +7626,10 @@ function gravarGrade(){
   const partes=[];
   if(nData) partes.push(`${nData} em datas específicas`);
   if(nMarcadas) partes.push(`${nMarcadas} já marcadas como dadas`);
+  /* aqui o choque com a grade do Estado avisa em vez de barrar: barrar
+     faria o professor perder linhas de uma agenda inteira sem perceber */
+  const chocam=sel.filter(a=>a.data && choqueComEstado(a.data, hm2min(a.inicio), hm2min(a.fim))).length;
+  if(chocam) partes.push(`${chocam} ${plural(chocam,'cai','caem')} em cima da grade do ${estado().nome||'CENE'}`);
   if(n) partes.push(`${n} ${n===1?'bloco recorrente':'blocos recorrentes'}`);
   toast('ok',`${sel.length} ${plural(sel.length,'aula gravada','aulas gravadas')}`, partes.join(' · ')+'. Confira na visão Semana.');
   if(nData){ const prim=sel.filter(a=>a.data).map(a=>a.data).sort()[0]; if(prim) refSemana=inicioSemana(pISO(prim)); }
@@ -7774,7 +8098,7 @@ function hashEstado(o){
    quais alertas ja tocaram aqui, quais resumos do dia ja sairam, e a ligacao
    com o Google Agenda. Se isso subisse junto, todo aparelho pareceria sempre
    alterado e qualquer mudanca do outro viraria conflito. */
-const NUV_LOCAIS = ['alertas','resumosUlt','gcal','gcalMap'];
+const NUV_LOCAIS = ['alertas','resumosUlt','gcal','gcalMap','gcalBusy'];
 function estadoLimpo(){
   const c=JSON.parse(JSON.stringify(S));
   if(c.config){ delete c.config.nuvem; delete c.config.apiKey; }   // nunca sobem
@@ -8062,6 +8386,73 @@ async function gcReq(caminho, opts){
   return js;
 }
 
+/* ==========================================================================
+   LEITURA DA AGENDA DO GOOGLE
+   O envio continua de mão única. Aqui é o contrário: trazemos o que já está
+   marcado nas agendas que o professor escolher, só como "horário ocupado",
+   para nada ser marcado por cima. Nada disso vira aula nem entra em contagem.
+   ========================================================================== */
+function gcLerCfg(){
+  const c=gcCfg();
+  c.ler = c.ler || {cals:[], atras:30, frente:180, ult:0};
+  S.gcalBusy = S.gcalBusy || [];
+  return c.ler;
+}
+async function gcCalendarios(){
+  const l=await gcReq('/users/me/calendarList?maxResults=250');
+  return (l.items||[]).map(x=>({id:x.id, nome:x.summary||x.id, dono:!!x.primary, cor:x.backgroundColor||''}));
+}
+/* um compromisso do Google só bloqueia se tiver hora marcada e valer de fato */
+function gcOcupaHorario(ev){
+  if(!ev || ev.status==='cancelled') return false;
+  if(!ev.start || !ev.start.dateTime) return false;     /* dia inteiro: aniversário, feriado */
+  if(ev.transparency==='transparent') return false;      /* marcado como "livre" no Google */
+  const eu=(ev.attendees||[]).find(a=>a.self);
+  if(eu && eu.responseStatus==='declined') return false; /* convite recusado */
+  return true;
+}
+async function gcBaixarOcupados(manual){
+  const c=gcCfg(), ler=gcLerCfg();
+  if(!ler.cals.length){ if(manual) toast('','Nenhuma agenda escolhida','Marque ao menos uma agenda do Google para conferir.'); return 0; }
+  const t0=new Date(); t0.setDate(t0.getDate()-(ler.atras||30)); t0.setHours(0,0,0,0);
+  const t1=new Date(); t1.setDate(t1.getDate()+(ler.frente||180)); t1.setHours(23,59,59,0);
+  const achados=[];
+  for(const calId of ler.cals){
+    if(calId===c.calId) continue;                        /* a nossa própria agenda não conta */
+    let pag='', voltas=0;
+    do{
+      const url=`/calendars/${encodeURIComponent(calId)}/events`
+        +`?timeMin=${encodeURIComponent(t0.toISOString())}&timeMax=${encodeURIComponent(t1.toISOString())}`
+        +`&singleEvents=true&orderBy=startTime&maxResults=2500${pag?'&pageToken='+encodeURIComponent(pag):''}`;
+      const r=await gcReq(url);
+      (r.items||[]).forEach(ev=>{
+        if(!gcOcupaHorario(ev)) return;
+        const di=new Date(ev.start.dateTime), df=new Date(ev.end&&ev.end.dateTime?ev.end.dateTime:ev.start.dateTime);
+        const dia=iso(di);
+        if(iso(df)!==dia){                                /* atravessa a meia-noite: fica até o fim do dia */
+          achados.push({cal:calId, titulo:ev.summary||'Compromisso', dia, ini:di.getHours()*60+di.getMinutes(), fim:1439});
+          return;
+        }
+        achados.push({cal:calId, titulo:ev.summary||'Compromisso', dia,
+          ini:di.getHours()*60+di.getMinutes(), fim:df.getHours()*60+df.getMinutes()});
+      });
+      pag=r.nextPageToken||''; voltas++;
+    }while(pag && voltas<10);
+  }
+  S.gcalBusy=achados;
+  ler.ult=Date.now();
+  salvar(true); renderTudo();
+  if(manual) toast('ok',`${achados.length} ${plural(achados.length,'horário ocupado','horários ocupados')}`,
+    'Trazidos da sua agenda do Google. Nada pode ser marcado por cima deles.');
+  return achados.length;
+}
+function ocupadosDoDia(dISO){ return (S.gcalBusy||[]).filter(x=>x.dia===dISO); }
+function choqueComGoogle(dISO, iniMin, fimMin){
+  if(!dISO) return null;
+  for(const x of ocupadosDoDia(dISO)) if(iniMin<x.fim && x.ini<fimMin) return x;
+  return null;
+}
+
 /* ---------- calendário dedicado ---------- */
 async function gcGarantirCalendario(){
   const c=gcCfg();
@@ -8204,6 +8595,21 @@ function gcPintar(estado, msg){
   const [cor,txt]=m[estado]||m.ok;
   el.innerHTML=`<span class="nuv-dot" style="background:${cor};box-shadow:0 0 8px ${cor}"></span><span>${esc(txt)}</span>`;
 }
+let gcListaCals=null;
+async function gcProcurarCals(){
+  try{
+    gcListaCals=await gcCalendarios();
+    renderGoogle();
+    toast('ok',`${gcListaCals.length} ${plural(gcListaCals.length,'agenda encontrada','agendas encontradas')}`,'Marque as que devem bloquear horário aqui.');
+  }catch(e){ toast('err','Não consegui listar suas agendas', e.message||'Tente conectar de novo.'); }
+}
+function gcMarcarCal(id, ligado){
+  const ler=gcLerCfg();
+  const i=ler.cals.indexOf(id);
+  if(ligado && i<0) ler.cals.push(id);
+  if(!ligado && i>=0) ler.cals.splice(i,1);
+  salvar(true);
+}
 function renderGoogle(){
   const box=$('#googleBox'); if(!box) return;
   const c=gcCfg(), n=Object.keys(S.gcalMap||{}).length;
@@ -8221,6 +8627,21 @@ function renderGoogle(){
       <div style="display:flex;gap:7px;margin-top:11px;flex-wrap:wrap">
         <button class="btn btn-sm btn-p" onclick="gcEnviar(true)"><svg><use href="#i-sobe"/></svg>Enviar agora</button>
         <button class="btn btn-sm" onclick="gcLimparVinculos()"><svg><use href="#i-volta"/></svg>Refazer vínculos</button>
+      </div>
+      <div class="gc-ler">
+        <div class="gc-ler-h"><b>Conferir choque de horário</b>
+          <span class="f-hint" style="margin:0">${(S.gcalBusy||[]).length} ${plural((S.gcalBusy||[]).length,'horário ocupado','horários ocupados')}${gcLerCfg().ult?` · atualizado ${new Date(gcLerCfg().ult).toLocaleString('pt-BR')}`:''}</span></div>
+        <p class="f-hint" style="margin:7px 0 10px">Escolha as agendas do Google que a AGENDA deve olhar. O que estiver marcado lá passa a bloquear o horário aqui. Nada vira aula nem entra em contagem.</p>
+        <div id="gcCals">${gcListaCals ? gcListaCals.map(k=>`
+          <label class="gc-cal"><input type="checkbox" value="${esc(k.id)}" ${gcLerCfg().cals.indexOf(k.id)>=0?'checked':''}
+            onchange="gcMarcarCal(this.value,this.checked)" ${k.id===gcCfg().calId?'disabled':''}>
+            <span class="gc-bola" style="background:${esc(k.cor||'var(--faint)')}"></span>
+            <span class="gc-nome">${esc(k.nome)}${k.id===gcCfg().calId?' (esta é a agenda criada por aqui)':''}</span></label>`).join('')
+          : '<p class="f-hint" style="margin:0">Clique em Procurar minhas agendas para começar.</p>'}</div>
+        <div style="display:flex;gap:7px;margin-top:10px;flex-wrap:wrap">
+          <button class="btn btn-sm" onclick="gcProcurarCals()"><svg><use href="#i-busca"/></svg>Procurar minhas agendas</button>
+          <button class="btn btn-sm btn-p" onclick="gcBaixarOcupados(true)"><svg><use href="#i-baixar"/></svg>Trazer horários ocupados</button>
+        </div>
       </div>`
     : `
     <div><label class="f-lbl">Client ID do Google Cloud</label>
@@ -8327,10 +8748,17 @@ function renderTurmas(){
         <div style="font-size:12.5px;color:var(--text-2);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(g.turma)||'sem turma'}</div>
       </div>
       <span class="mono" style="font-size:10.5px;color:var(--faint);white-space:nowrap">${g.n} ${g.n===1?'aula':'aulas'}</span>
+      <div class="cor-sel" data-tooltip="Cor desta turma na agenda">${PALETA.slice(0,7).map(cc=>`<button class="cor-op ${corDaTurma(g.turma)===cc?'on':''}" style="background:${cc};width:17px;height:17px" onclick="definirCorTurma(${esc(JSON.stringify(g.turma))},'${cc}')"></button>`).join('')}</div>
       <button class="mini-btn" data-tooltip="Renomear em todos" onclick="turmaEdit=${esc(JSON.stringify(g.chave))};renderTurmas();"><svg><use href="#i-edit"/></svg></button>
     </div>`).join('');
   if(turmaEdit!=null){ const alvo=gs.findIndex(g=>g.chave===turmaEdit);
     if(alvo>=0 && $('#tuTurma'+alvo)) $('#tuTurma'+alvo).focus(); }
+}
+function definirCorTurma(turma, cor){
+  const t=String(turma||'').trim(); if(!t) return;
+  S.turmasCor=S.turmasCor||{};
+  S.turmasCor[t]=cor;
+  salvar(true); renderTudo(); renderTurmas();
 }
 function salvarTurma(i){
   const gs=gruposTurma(), g=gs[i]; if(!g) return;
