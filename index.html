@@ -282,6 +282,10 @@ html[data-tema="claro"] .chip.on{background:rgba(242,193,78,.24);border-color:#D
 .ch-txt{display:flex;flex-direction:column;gap:2px;min-width:0}
 .ch-txt b{font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ch-txt span{font-size:11.5px;color:var(--muted)}
+.cmdk-op.novo{border-left:2px solid var(--gold)}
+.lnk{color:var(--gold);text-decoration:underline;text-underline-offset:2px}
+.lnk:hover{color:var(--text)}
+.cmdk-op.novo .k{color:var(--gold);font-size:11px;text-transform:none;letter-spacing:0}
 .fech-tot td{border-top:1.5px solid var(--line-strong);font-weight:600;color:var(--text-2)}
 .fech-rodape{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:13px;
   font-size:12px;color:var(--muted);line-height:1.5}
@@ -553,7 +557,13 @@ html[data-legivel="1"] .nota-lista p{font-size:12.5px}
 .col-dia{position:relative;border-left:1px solid var(--line);min-width:0}
 .col-dia.fds{background:rgba(169,139,242,.028)}
 .col-dia.hoje{background:rgba(242,193,78,.035)}
-.slot{height:var(--px-hora);border-bottom:1px solid var(--line);transition:background var(--dur);cursor:crosshair}
+.slot{height:var(--px-hora);border-bottom:1px solid var(--line);transition:background var(--dur);cursor:crosshair;position:relative}
+/* o duplo clique para criar existia mas era invisível: agora o horário vazio
+   mostra um + discreto quando o ponteiro passa por cima */
+.slot::after{content:'+';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-family:var(--ff-mono);font-size:17px;color:var(--faint);opacity:0;transition:opacity var(--dur);pointer-events:none}
+@media(hover:hover){ .slot:hover::after{opacity:.45} }
+body.arrastando-grade .slot::after{opacity:0}
 /* faixa de horas sem nenhum compromisso na semana, colapsada */
 .hora-pulo{
   display:flex;align-items:center;justify-content:flex-end;padding:0 8px;
@@ -5017,9 +5027,14 @@ function renderSemana(){
       detalheOcorrencia(el.dataset.ev, el.dataset.dia); };
   });
   ligarArrasto();
+  /* no computador o duplo clique evita criar sem querer; no toque, duplo
+     toque é desconfortável, então um toque já abre o rascunho */
+  const toque = matchMedia('(hover:none)').matches;
   $$('#semanaBody .slot').forEach(el=>{
-    el.ondblclick=()=>modalEvento(null, el.dataset.dia, min2hm(+el.dataset.min));
-    el.onclick=e=>{ if(e.detail===1) return; };
+    const abrir=()=>modalEvento(null, el.dataset.dia, min2hm(+el.dataset.min));
+    el.ondblclick=abrir;
+    if(toque) el.onclick=e=>{ if(!arr && !rez) abrir(); };
+    else el.onclick=e=>{ if(e.detail===1) return; };
   });
 
   renderSemanaLista(dias);
@@ -6109,15 +6124,15 @@ function durPasso(k){
   novo = Math.max(DUR_PASSO, Math.min(DUR_MAX, novo, 1439-ini));
   setHoraCampo('evFim', min2hm(ini+novo));
 }
-function modalEvento(id, diaPre, horaPre, tipoPre){
+function modalEvento(id, diaPre, horaPre, tipoPre, rascunho){
   const ev = id ? S.eventos.find(e=>e.id===id) : null;
   const novo = !ev;
-  const d = ev || {
+  const d = ev || Object.assign({
     titulo:'', tipo:tipoPre||'aula', disciplina:'', professor:'', local:'',
     recorrencia: diaPre?'unica':'semanal', dias:diaPre?[pISO(diaPre).getDay()]:[1,2,3,4,5],
     data: diaPre||iso(new Date()), inicio: horaPre||'07:00', fim: min2hm(Math.min(1439, hm2min(horaPre||'07:00')+DUR_PADRAO)),
     vigIni:'', vigFim:'', cor:'', obs:'', avisos:[15], prioridade:2
-  };
+  }, rascunho||{});
   const discOpts = S.disciplinas.map(x=>`<option value="${esc(x.nome)}">`).join('');
   abrirModal(`
     <div class="modal-h">
@@ -8316,6 +8331,11 @@ create policy "dono" on agenda_estado
     </div>
     <div class="modal-f"><div class="sp"></div><button class="btn" onclick="fecharModal()">Fechar</button></div>`);
 }
+function copiarCod(btn, titulo, sub){
+  const t=btn.parentElement.querySelector('.cod').textContent.trim();
+  navigator.clipboard.writeText(t).then(()=>toast('ok', titulo||'Copiado', sub||''))
+    .catch(()=>toast('err','Não deu para copiar','Selecione o texto e copie com Ctrl + C.'));
+}
 function copiarSQL(btn){
   const t=btn.parentElement.querySelector('.cod').textContent;
   navigator.clipboard.writeText(t).then(()=>toast('ok','SQL copiado','Cole no SQL Editor do Supabase e execute.'))
@@ -8654,23 +8674,43 @@ function renderGoogle(){
   if(c.calId) gcPintar(gcOcupado?'enviando':'ok');
 }
 function modalComoGoogle(){
+  const org = /^https?:/.test(location.origin||'') ? location.origin : 'https://jadielvarges.github.io';
   abrirModal(`<div class="modal-h"><h3>Ligar a Google Agenda</h3>
       <button class="x-btn" onclick="fecharModal()"><svg style="width:15px;height:15px"><use href="#i-x"/></svg></button></div>
     <div class="modal-b">
+      <p style="margin:0 0 14px;font-size:12.5px;color:var(--muted);line-height:1.6">
+        São 4 passos, uma vez só na vida. Depois disso a agenda envia tudo sozinha, sem você tocar em nada.
+        Tudo é de graça e não precisa de cartão.
+      </p>
       <div class="passos">
-        <div class="pss"><b>1</b><div><p>No <span class="destaque-suave">console.cloud.google.com</span>, crie um projeto e ative a <b>Google Calendar API</b>.</p></div></div>
-        <div class="pss"><b>2</b><div><p>Em <span class="destaque-suave">Tela de consentimento</span>, escolha <b>Externo</b>, preencha nome e e-mail e adicione a si mesmo como usuário de teste.</p></div></div>
-        <div class="pss"><b>3</b><div><p>Em <span class="destaque-suave">Credenciais → Criar cliente</span>, escolha <b>Aplicativo da Web</b> e informe o endereço do site em <b>Origens JavaScript autorizadas</b>:</p>
-          <pre class="cod">${esc(/^https?:/.test(location.origin||'')?location.origin:'https://seu-site.netlify.app')}</pre>
-          <button class="btn btn-sm" onclick="copiarSQL(this)"><svg><use href="#i-copia"/></svg>Copiar</button></div></div>
-        <div class="pss"><b>4</b><div><p>Copie o <b>Client ID</b> gerado e cole no campo ao lado. Depois clique em Conectar e autorize.</p></div></div>
+        <div class="pss"><b>1</b><div>
+          <p>Abra <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener" class="lnk">console.cloud.google.com</a>,
+          clique em <b>Criar projeto</b>, dê o nome <b>Agenda Jadiel</b> e confirme.</p></div></div>
+        <div class="pss"><b>2</b><div>
+          <p>Abra <a href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com" target="_blank" rel="noopener" class="lnk">esta página</a>
+          e clique no botão azul <b>Ativar</b>. É a Google Calendar API.</p></div></div>
+        <div class="pss"><b>3</b><div>
+          <p>No menu da esquerda, <b>Tela de permissão OAuth</b>. Escolha <b>Externo</b>, preencha o nome do app e o seu e-mail
+          nos dois campos pedidos, e salve. Depois, em <b>Público-alvo</b>, clique em <b>Adicionar usuários</b> e coloque o seu próprio e-mail.</p></div></div>
+        <div class="pss"><b>4</b><div>
+          <p>Ainda no menu da esquerda, <b>Credenciais → Criar credenciais → ID do cliente OAuth</b>.
+          Tipo: <b>Aplicativo da Web</b>. Em <b>Origens JavaScript autorizadas</b>, clique em Adicionar URI e cole exatamente isto:</p>
+          <pre class="cod">${esc(org)}</pre>
+          <button class="btn btn-sm" onclick="copiarCod(this,'Endereço copiado','Cole em Origens JavaScript autorizadas.')"><svg><use href="#i-copia"/></svg>Copiar o endereço</button>
+          <p style="margin-top:9px">Clique em Criar. Vai aparecer um código comprido terminado em
+          <span class="mono" style="font-size:11px">.apps.googleusercontent.com</span>. Copie e cole no campo
+          <b>Client ID</b> aqui em Ajustes. Depois clique em <b>Conectar</b> e autorize na janela do Google.</p></div></div>
       </div>
       <div class="nota-lista">
-        <p><b class="destaque-suave">Mão única:</b> a Agenda escreve num calendário próprio, <b>${esc(GC_NOME)}</b>. Seus outros calendários não são tocados.</p>
-        <p class="asterisco">Precisa estar publicado em https. O Google não autoriza páginas abertas direto do arquivo.</p>
+        <p><b class="destaque-suave">Depois disso não tem trabalho nenhum:</b> ligue a chave
+        <b>Enviar sozinho depois de cada alteração</b> e tudo que você criar aqui aparece na Google Agenda em poucos segundos,
+        inclusive as alterações e as exclusões. Nunca é preciso salvar um por um.</p>
+        <p>A agenda escreve num calendário só dela, <b>${esc(GC_NOME)}</b>. Seus outros calendários não são alterados em nada.</p>
+        <p>Se você marcar as agendas em <b>Conferir choque de horário</b>, ela também lê os seus compromissos do Google para não deixar marcar nada por cima.</p>
+        <p class="asterisco">Só funciona com a agenda publicada na internet. Abrindo o arquivo direto do computador o Google recusa a autorização.</p>
       </div>
     </div>
-    <div class="modal-f"><div class="sp"></div><button class="btn" onclick="fecharModal()">Fechar</button></div>`);
+    <div class="modal-f"><div class="sp"></div><button class="btn btn-fechar" onclick="fecharModal()">Fechar Formulário</button></div>`,'wide');
 }
 
 function renderAjustes(){
@@ -9163,6 +9203,90 @@ function exportarRelatorio(){
 /* ==========================================================================
    PALETA DE COMANDOS E ATALHOS
    ========================================================================== */
+/* ----- escrever a frase e a agenda entender -----
+   "aula PC BA terça 19h", "reunião amanhã 14h30", "prova 12/12 08:00 às 10:00".
+   Sai um rascunho, nunca um compromisso gravado: o professor confere antes. */
+const DIAS_FRASE=[
+  [/\bdomingos?\b/,0],[/\bsegunda(s|-feiras?)?\b|\bsegs?\b/,1],[/\bter[çc]as?(-feiras?)?\b|\bters?\b/,2],
+  [/\bquartas?(-feiras?)?\b|\bquas?\b/,3],[/\bquintas?(-feiras?)?\b|\bquis?\b/,4],
+  [/\bsextas?(-feiras?)?\b|\bsexs?\b/,5],[/\bs[áa]bados?\b|\bsabs?\b/,6]
+];
+function interpretarFrase(txt){
+  const bruto=String(txt||'').trim();
+  if(bruto.length<3) return null;
+  /* semAcento devolve o texto com o MESMO comprimento, então dá para marcar
+     os trechos consumidos por posição e recortá-los do texto original.
+     Recortar por substituição de texto não funcionava: o padrão era achado
+     em "terca" e não existia em "terça". */
+  const s0=semAcento(bruto);
+  const alinhado = s0.length===bruto.length;
+  const base = alinhado ? bruto : s0;
+  const cortes=[];
+  const marcar=m=>{ if(m && m.index>=0) cortes.push([m.index, m.index+m[0].length]); };
+  let achou=false;
+
+  let ini=null, fim=null;
+  /* "19h as 21h" tambem precisa casar: o h sozinho, sem minutos */
+  const par=s0.match(/(\d{1,2})\s*(?:[:h](\d{2})|h)?\s*(?:as|ate|a|-|–|—)\s*(\d{1,2})\s*(?:[:h](\d{2})|h)?(?!\d)/);
+  const umo=s0.match(/\b(\d{1,2})[:h](\d{2})\b|\b(\d{1,2})\s*h\b/);
+  if(par && +par[1]<=23 && +par[3]<=23){
+    ini=String(+par[1]).padStart(2,'0')+':'+(par[2]||'00');
+    fim=String(+par[3]).padStart(2,'0')+':'+(par[4]||'00');
+    achou=true; marcar(par);
+  }else if(umo){
+    const h=+(umo[1]||umo[3]), m=umo[2]||'00';
+    if(h<=23){ ini=String(h).padStart(2,'0')+':'+m;
+      fim=min2hm(Math.min(1439, hm2min(ini)+DUR_PADRAO)); achou=true; marcar(umo); }
+  }
+
+  let data='', dias=null, recor='unica';
+  const dm=s0.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+  if(dm){
+    const dd=+dm[1], mm=+dm[2]; let aa=dm[3]?+dm[3]:new Date().getFullYear();
+    if(aa<100) aa+=2000;
+    if(dataValida(dd,mm,aa)){
+      data=`${aa}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}`;
+      achou=true; marcar(dm);
+    }
+  }
+  if(!data){
+    const rel=[[/\bdepois de amanha\b/,2],[/\bamanha\b/,1],[/\bhoje\b/,0]];
+    for(const [re,n] of rel){
+      const m=s0.match(re);
+      if(m){ data=iso(addDias(new Date(),n)); achou=true; marcar(m); break; }
+    }
+  }
+  if(!data){
+    const mt=s0.match(/\btodas?\s+(as\s+)?/);
+    for(const [re,n] of DIAS_FRASE){
+      const m=s0.match(re);
+      if(m){
+        achou=true; marcar(m);
+        if(mt){ recor='semanal'; dias=[n]; marcar(mt); }
+        else{ let d=new Date(); for(let k=0;k<8;k++){ if(d.getDay()===n && k>0) break; d=addDias(d,1); } data=iso(d); }
+        break;
+      }
+    }
+  }
+  if(!achou) return null;
+  const dentro=i=>cortes.some(([a,b])=>i>=a && i<b);
+  const titulo=base.split('').map((ch,i)=>dentro(i)?' ':ch).join('')
+    .replace(/\b(as|às|das|de|do|da|em|no|na|ate|até)\b/gi,' ')
+    .replace(/\s{2,}/g,' ').trim();
+  if(!titulo) return null;
+  const r={titulo:titulo.charAt(0).toUpperCase()+titulo.slice(1)};
+  if(ini){ r.inicio=ini; r.fim=fim; }
+  if(recor==='semanal'){ r.recorrencia='semanal'; r.dias=dias; r.data=''; }
+  else{ r.recorrencia='unica'; r.data=data||iso(new Date()); r.dias=[]; }
+  r.tipo=tipoDoTexto(titulo);
+  return r;
+}
+function resumoRascunho(r){
+  const quando = r.recorrencia==='semanal'
+    ? 'toda '+DIAS_L[r.dias[0]].replace('-feira','')
+    : fmtCurto(pISO(r.data));
+  return `${quando}${r.inicio?`, ${r.inicio} às ${r.fim}`:''}`;
+}
 const COMANDOS=[
   {t:'Ir para Hoje', ic:'i-hoje', k:'T', fn:()=>irPara('hoje')},
   {t:'Ir para Semana', ic:'i-semana', k:'2', fn:()=>irPara('semana')},
@@ -9186,21 +9310,26 @@ function abrirCmdk(){
 }
 function fecharCmdk(){ $('#cmdk').classList.remove('open'); }
 function filtrarCmdk(q){
-  q=q.toLowerCase().trim();
+  const frase=String(q||'').trim();   /* o título do compromisso sai daqui, com maiúsculas */
+  q=frase.toLowerCase();
   const cmds=COMANDOS.filter(c=>c.t.toLowerCase().includes(q)).map(c=>({tipo:'cmd',...c}));
+  /* frase solta vira um rascunho de compromisso na primeira linha */
+  const r=frase.length>=4 ? interpretarFrase(frase) : null;
+  const criar = r ? [{tipo:'novo', t:`Criar: ${r.titulo}`, ic:'i-plus-cal', k:resumoRascunho(r),
+      fn:()=>modalEvento(null, null, null, null, r)}] : [];
   const evs=q? S.eventos.filter(e=>[e.titulo,e.disciplina,e.professor].join(' ').toLowerCase().includes(q)).slice(0,6)
       .map(e=>({tipo:'ev',t:e.titulo,ic:'i-relogio',k:e.inicio,fn:()=>modalEvento(e.id)})) : [];
-  cmdkFiltrado=cmds.concat(evs); cmdkSel=0; desenharCmdk();
+  cmdkFiltrado=criar.concat(cmds, evs); cmdkSel=0; desenharCmdk();
 }
 function desenharCmdk(){
   $('#cmdkLista').innerHTML=cmdkFiltrado.length? cmdkFiltrado.map((c,i)=>`
-    <div class="cmdk-op ${i===cmdkSel?'sel':''}" data-i="${i}"><svg><use href="#${c.ic}"/></svg>${esc(c.t)}<span class="k">${c.k||''}</span></div>`).join('')
+    <div class="cmdk-op ${i===cmdkSel?'sel':''} ${c.tipo==='novo'?'novo':''}" data-i="${i}"><svg><use href="#${c.ic}"/></svg>${esc(c.t)}<span class="k">${esc(c.k||'')}</span></div>`).join('')
     : `<div style="padding:22px;text-align:center;color:var(--muted);font-size:12.5px">Nada encontrado.</div>`;
   $$('#cmdkLista .cmdk-op').forEach(el=>el.onclick=()=>{ fecharCmdk(); cmdkFiltrado[+el.dataset.i].fn(); });
 }
 function modalAtalhos(){
   const a=[['N','Novo compromisso'],['T','Voltar para Hoje'],['1 a 7','Trocar de seção'],['← →','Semana ou mês anterior/seguinte'],
-    ['Ctrl + K','Paleta de comandos'],['/','Buscar compromissos'],['Esc','Fechar janela aberta'],['Duplo clique na grade','Criar no horário exato']];
+    ['Ctrl + K','Paleta de comandos'],['/','Buscar compromissos'],['Esc','Fechar janela aberta'],['Duplo clique na grade','Criar no horário exato'],['Ctrl + K e escrever','Ex.: aula PC BA terça 19h']];
   abrirModal(`<div class="modal-h"><h3>Atalhos de teclado</h3><button class="x-btn" onclick="fecharModal()"><svg style="width:15px;height:15px"><use href="#i-x"/></svg></button></div>
   <div class="modal-b">${a.map(([k,d])=>`<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--line)">
     <span class="mono" style="background:var(--surface-3);border:1px solid var(--line);border-radius:6px;padding:3px 9px;font-size:11.5px;min-width:74px;text-align:center">${k}</span>
@@ -9227,6 +9356,27 @@ function alternarTema(ev){
   raiz.classList.add('trocando-tema');
   const t=document.startViewTransition(troca);
   t.finished.finally(()=>raiz.classList.remove('trocando-tema'));
+}
+/* gesto horizontal: 1 para a frente, -1 para trás */
+function ligarGesto(idVista, fn){
+  const el=document.getElementById(idVista); if(!el) return;
+  let x0=0, y0=0, valendo=false;
+  el.addEventListener('touchstart', e=>{
+    if(e.touches.length!==1){ valendo=false; return; }
+    const alvo=e.target;
+    /* não sequestra o gesto em cima de um compromisso, de um botão ou de
+       uma área que rola para o lado sozinha */
+    if(alvo.closest('.bloco, button, a, input, select, textarea, .sem-lista .sl-item, [style*="overflow-x"]')){ valendo=false; return; }
+    x0=e.touches[0].clientX; y0=e.touches[0].clientY; valendo=true;
+  }, {passive:true});
+  el.addEventListener('touchend', e=>{
+    if(!valendo) return;
+    valendo=false;
+    const t=e.changedTouches[0]; if(!t) return;
+    const dx=t.clientX-x0, dy=t.clientY-y0;
+    if(Math.abs(dx)<60 || Math.abs(dx)<Math.abs(dy)*2) return;
+    fn(dx<0 ? 1 : -1);
+  }, {passive:true});
 }
 function tickRelogio(){
   const n=new Date();
@@ -9264,6 +9414,11 @@ function iniciar(){
   $('#cmdk').onclick=e=>{ if(e.target===$('#cmdk')) fecharCmdk(); };
 
   /* semana */
+  /* arrastar o dedo para o lado troca de semana ou de mês, como nos apps
+     de calendário do celular. Começa a valer só longe dos blocos, para não
+     atrapalhar quem está movendo um compromisso. */
+  ligarGesto('v-semana', d=>{ refSemana=addDias(refSemana, d*7); renderSemana(); });
+  ligarGesto('v-mes',    d=>{ refMes=addMeses(refMes, d); renderMes(); });
   $('#semAnt').onclick=()=>{ refSemana=addDias(refSemana,-7); renderSemana(); };
   $('#semProx').onclick=()=>{ refSemana=addDias(refSemana,7); renderSemana(); };
   $('#semHoje').onclick=()=>{ refSemana=inicioSemana(new Date()); renderSemana(); };
