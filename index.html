@@ -244,6 +244,16 @@ html[data-tema="claro"] .chip.on{background:rgba(242,193,78,.24);border-color:#D
 .rf-linha{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .rf-lbl{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);min-width:66px}
 .rf-chips{display:flex;gap:6px;flex-wrap:wrap;flex:1}
+/* ===== rodapé das janelas no celular =====
+   Com 4 botões o rodapé pedia 516px numa faixa de 366px, e "Salvar
+   alterações" ficava inteiro fora da tela: não dava para salvar uma edição
+   pelo telefone. Agora quebra linha, e a ação principal ocupa a largura toda. */
+@media(max-width:900px){
+  .modal-f{flex-wrap:wrap;gap:8px;justify-content:stretch}
+  .modal-f .sp{display:none}
+  .modal-f .btn{flex:1 1 auto;min-width:0;justify-content:center;white-space:nowrap}
+  .modal-f .btn-p{flex:1 1 100%;order:-1;min-height:44px}
+}
 /* ===== navegação do celular =====
    A barra de ícones de cima só mostrava 5 de 9 botões numa faixa de 122px,
    e os outros 4, entre eles Ajustes, ficavam fora da tela sem nenhum aviso.
@@ -301,6 +311,8 @@ html[data-tema="claro"] .chip.on{background:rgba(242,193,78,.24);border-color:#D
 .folha-item.on svg{color:var(--gold)}
 .folha-item .fi-badge{margin-left:auto;background:var(--coral);color:#fff;font-size:10px;
   padding:2px 7px;border-radius:999px;font-family:var(--ff-mono)}
+.alerta-item.clicavel{cursor:pointer;transition:background var(--dur)}
+.alerta-item.clicavel:hover,.alerta-item.clicavel:active{background:var(--surface-2)}
 .dg-l{display:flex;gap:11px;align-items:flex-start;padding:11px 0;border-bottom:1px solid var(--line)}
 .dg-l:last-child{border-bottom:none}
 .dg-i{width:21px;height:21px;border-radius:50%;display:flex;align-items:center;justify-content:center;
@@ -1556,25 +1568,32 @@ html[data-legivel="1"] .mes-cel .dn{font-size:14px}
   .mes-grid{min-width:0;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
   .mes-wrap,#mesGrid{overflow-x:visible}
   .mes-head{font-size:8px;letter-spacing:.06em;padding:3px 0}
-  .mes-cel{min-height:58px;padding:5px 2px 9px;gap:2px;align-items:center;border-radius:9px}
+  .mes-cel{min-height:66px;padding:5px 3px 9px;gap:0;align-items:stretch;border-radius:9px}
   .mes-cel:hover{transform:none}
-  .mes-cel .dn{font-size:12.5px;justify-content:center}
+  .mes-cel .dn{font-size:12.5px;justify-content:center;flex:none}
   .mes-cel .dq{display:none}
-  /* cada compromisso vira uma bolinha da cor dele */
+  /* Bolinha de 6px some no tema claro. Cada compromisso vira uma etiqueta
+     com o horário, na cor da turma, que se lê de relance. */
   .mes-ev{
-    all:unset;display:block;width:6px;height:6px;border-radius:50%;
-    background:var(--cv,var(--c));flex:none
+    all:unset;display:block;width:100%;box-sizing:border-box;text-align:center;
+    font-family:var(--ff-mono);font-size:8.6px;font-weight:700;line-height:1.6;
+    letter-spacing:-.02em;border-radius:4px;padding:1px 0;margin-top:2px;
+    background:color-mix(in srgb,var(--cv,var(--c)) 20%,transparent);
+    color:var(--cv,var(--c));white-space:nowrap;overflow:hidden
   }
-  .mes-ev.feito{opacity:.4}
-  .mes-ev.inativo{background:var(--faint);opacity:.45}
-  /* .mes-ev .me-t.duas soma 3 classes e vencia o seletor universal, deixando
-     a primeira letra do título solta dentro da bolinha. Daí os 3 níveis aqui. */
+  .mes-ev.feito{opacity:.45;text-decoration:line-through}
+  .mes-ev.inativo{opacity:.4;text-decoration:line-through}
+  /* .mes-ev .me-t.duas soma 3 classes e vencia o seletor universal. Daí os 3
+     níveis aqui, para esconder tudo menos o horário. */
   .mes-grid .mes-cel .mes-ev *{display:none}
-  .mes-mais{font-family:var(--ff-mono);font-size:9px;color:var(--faint);line-height:1;margin-top:2px}
+  .mes-grid .mes-cel .mes-ev .me-t{display:block}
+  .mes-grid .mes-cel .mes-ev .me-t .me-h{display:inline;font-size:8.6px;color:inherit;font-weight:700}
+  /* o dia que tem compromisso fica visivelmente diferente do dia vazio */
+  .mes-cel:has(.mes-ev){border-color:var(--line-strong);background:var(--surface)}
+  .mes-cel:has(.mes-ev) .dn{color:var(--text);font-weight:600}
+  .mes-mais{font-family:var(--ff-mono);font-size:8.6px;color:var(--muted);line-height:1.5;margin-top:2px;text-align:center}
   .mes-mais .mm-p{display:none}
-  /* as bolinhas lado a lado, não empilhadas */
   .mes-cel{flex-direction:column}
-  .mes-cel .mes-ev{margin:0 auto}
   .mes-carga{height:3px}
   .hora-lbl{font-size:9px}
   .f-2,.f-3{grid-template-columns:1fr}
@@ -3196,7 +3215,7 @@ const MESES_C= ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov
 function chipMes(o, largo){
   const inst=(o.ev.instituicao||'').trim(), turma=(o.ev.turma||o.ev.curso||'').trim();
   return `<div class="mes-ev ${inativa(o)?'inativo':''} ${o.status==='feito'?'feito':''} ${o.status==='faltou'?'faltou':''}" style="--c:${o.cor}" data-ev="${o.ev.id}" data-dia="${o.dia}" data-tooltip="${esc(o.ev.titulo)}&#10;${min2hm(o.iniMin)}–${min2hm(o.fimMin)}${inst?'&#10;'+esc(inst):''}${turma?'&#10;'+esc(turma):''}">
-    <div class="me-t ${largo?'duas':''}"><span class="me-h">${min2hm(o.iniMin)}</span> ${esc(o.ev.titulo)}</div>
+    <div class="me-t ${largo?'duas':''}"><span class="me-h">${min2hm(o.iniMin)}</span> <span class="me-n">${esc(o.ev.titulo)}</span></div>
     ${(inst||o.ev.modalidade)?`<div class="me-i">${esc([modCurta(o.ev.modalidade), inst].filter(Boolean).join(' · '))}</div>`:''}
     ${turma?`<div class="me-u">${esc(turma)}</div>`:''}
     ${(o.ev.transferidoDe||o.ev.reposicaoDe)?`<div class="me-o"><s>${esc(fmtCurto(pISO((o.ev.transferidoDe||o.ev.reposicaoDe).data)))} · ${esc((o.ev.transferidoDe||o.ev.reposicaoDe).ini||'')}</s></div>`:''}
@@ -5389,7 +5408,7 @@ function abrirDia(dISO){
       <button class="btn btn-sm" onclick="fecharModal();modalEvento(null,'${dISO}')"><svg><use href="#i-mais"/></svg>Adicionar</button></div>
     <div class="modal-b">
       ${l.length? l.map(o=>`
-        <div class="alerta-item" style="--c:${o.cor}">
+        <div class="alerta-item clicavel" style="--c:${o.cor}" onclick="fecharModal();detalheOcorrencia('${o.ev.id}','${dISO}')">
           <div class="ic"><svg><use href="#${(TIPOS[o.ev.tipo]||TIPOS.aula).ic}"/></svg></div>
           <div class="cnt"><b>${esc(o.ev.titulo)}</b>
             <p><span class="mono">${min2hm(o.iniMin)}–${min2hm(o.fimMin)}</span> · ${fmtDur(o.dur)}${o.ev.local?' · '+esc(o.ev.local):''}${(S.config.mostrarProfessor&&o.ev.professor)?' · '+esc(o.ev.professor):''}${o.ev.modalidade?' · '+esc(o.ev.modalidade):''}</p>
@@ -5397,12 +5416,12 @@ function abrirDia(dISO){
             ${(o.ev.turma||o.ev.curso)?`<p style="font-size:11px;color:var(--text-2);margin-top:1px;border-left:2px solid ${o.cor};padding-left:6px">${esc(o.ev.turma||o.ev.curso)}</p>`:''}</div>
           <div style="display:flex;gap:5px;align-items:center">
             <span class="pill ${o.status==='feito'?'ok':o.status==='faltou'?'no':'pd'}">${o.status==='feito'?'feito':o.status==='faltou'?'falta':'previsto'}</span>
-            <button class="mini-btn" data-tooltip="Editar" onclick="fecharModal();modalEvento('${o.ev.id}')"><svg><use href="#i-edit"/></svg></button>
+            <button class="mini-btn" data-tooltip="Editar" onclick="event.stopPropagation();fecharModal();modalEvento('${o.ev.id}')"><svg><use href="#i-edit"/></svg></button>
           </div>
         </div>`).join('')
        : `<div class="vazio"><svg><use href="#i-plus-cal"/></svg><h4>Dia livre</h4><p>Nenhum compromisso previsto. Bom momento para encaixar uma revisão.</p></div>`}
     </div>
-    <div class="modal-f"><div class="sp"></div><button class="btn" onclick="fecharModal()">Fechar</button></div>`);
+    <div class="modal-f"><div class="sp"></div><button class="btn btn-fechar" onclick="fecharModal()">Fechar Formulário</button></div>`);
 }
 </script>
 <script>
