@@ -244,6 +244,63 @@ html[data-tema="claro"] .chip.on{background:rgba(242,193,78,.24);border-color:#D
 .rf-linha{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .rf-lbl{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);min-width:66px}
 .rf-chips{display:flex;gap:6px;flex-wrap:wrap;flex:1}
+/* ===== navegação do celular =====
+   A barra de ícones de cima só mostrava 5 de 9 botões numa faixa de 122px,
+   e os outros 4, entre eles Ajustes, ficavam fora da tela sem nenhum aviso.
+   No celular a navegação passa a ser esta barra de baixo, com um Mais que
+   abre o resto. */
+.barra-cel{display:none}
+@media(max-width:900px){
+  .barra-cel{
+    display:grid;grid-template-columns:repeat(5,1fr);align-items:stretch;
+    position:fixed;left:0;right:0;bottom:0;z-index:200;
+    background:var(--surface);border-top:1px solid var(--line-strong);
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+    box-shadow:0 -6px 24px rgba(0,0,0,.18)
+  }
+  .bc-item{
+    position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+    min-height:50px;padding:5px 2px;border:none;background:transparent;color:var(--faint);
+    font-family:inherit;font-size:10px;letter-spacing:.01em;cursor:pointer;border-radius:11px;
+    transition:color var(--dur),background var(--dur)
+  }
+  .bc-item svg{width:21px;height:21px}
+  .bc-item.on{color:var(--gold);background:var(--gold-fraco,rgba(242,193,78,.1))}
+  .bc-item:active{background:var(--surface-2)}
+  .bc-badge{
+    position:absolute;top:5px;right:calc(50% - 21px);min-width:16px;height:16px;padding:0 4px;
+    border-radius:999px;background:var(--coral);color:#fff;font-size:9.5px;font-style:normal;
+    display:flex;align-items:center;justify-content:center;font-family:var(--ff-mono)
+  }
+  .bc-badge.zero{display:none}
+  /* a barra de cima some: brand, tema e novo continuam no topo */
+  .rail .nav{display:none}
+  .rail{justify-content:space-between}
+  /* espaço para o conteúdo não ficar embaixo da barra */
+  .app{padding-bottom:70px}
+  /* avisos em faixa larga cobriam os botões das janelas: vão para baixo delas */
+  .toasts{bottom:calc(76px + env(safe-area-inset-bottom));z-index:860}
+}
+/* folha do botão Mais */
+.folha-fundo{position:fixed;inset:0;background:rgba(8,9,15,.55);z-index:1200;opacity:0;transition:opacity var(--dur)}
+.folha-fundo.on{opacity:1}
+.folha{
+  position:fixed;left:0;right:0;bottom:0;z-index:1210;background:var(--surface);
+  border-top-left-radius:18px;border-top-right-radius:18px;border-top:1px solid var(--line-strong);
+  padding:10px 12px calc(16px + env(safe-area-inset-bottom));
+  transform:translateY(100%);transition:transform var(--dur)
+}
+.folha.on{transform:translateY(0)}
+.folha-puxa{width:38px;height:4px;border-radius:999px;background:var(--line-strong);margin:4px auto 12px}
+.folha-item{
+  display:flex;align-items:center;gap:13px;width:100%;padding:13px 12px;border:none;background:transparent;
+  border-radius:12px;color:var(--text-2);font-family:inherit;font-size:14px;text-align:left;cursor:pointer
+}
+.folha-item svg{width:19px;height:19px;color:var(--faint);flex:none}
+.folha-item.on{background:var(--surface-2);color:var(--gold)}
+.folha-item.on svg{color:var(--gold)}
+.folha-item .fi-badge{margin-left:auto;background:var(--coral);color:#fff;font-size:10px;
+  padding:2px 7px;border-radius:999px;font-family:var(--ff-mono)}
 /* fechamento por turma */
 .fech-datas{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:0 0 14px}
 .fech-datas>div{display:flex;align-items:center;gap:8px}
@@ -1554,7 +1611,7 @@ html.trocando-tema::view-transition-new(root){ animation:tema-revela var(--t-4) 
 <symbol id="i-metas" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/></symbol>
 <symbol id="i-sino" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 10-12 0c0 6-2.5 7-2.5 7h17S18 14 18 8z"/><path d="M13.7 20a2 2 0 01-3.4 0"/></symbol>
 <symbol id="i-ajustes" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.6 1.6 0 00-2.7 1.1v.3a2 2 0 11-4 0v-.2a1.6 1.6 0 00-2.8-1.1l-.1.1a2 2 0 11-2.8-2.8l.1-.1A1.6 1.6 0 004 15a2 2 0 01-2-2 2 2 0 012-2 1.6 1.6 0 001-2.7l-.1-.1a2 2 0 112.8-2.8l.1.1A1.6 1.6 0 0011 4.6V4a2 2 0 114 0v.2a1.6 1.6 0 002.7 1.1l.1-.1a2 2 0 112.8 2.8l-.1.1A1.6 1.6 0 0020 11a2 2 0 010 4z"/></symbol>
-<symbol id="i-mais" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-mais-menu" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></symbol><symbol id="i-mais" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
 <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></symbol>
 <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></symbol>
 <symbol id="i-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></symbol>
@@ -1586,6 +1643,13 @@ html.trocando-tema::view-transition-new(root){ animation:tema-revela var(--t-4) 
 
 <div class="app">
   <!-- ======================= RAIL ======================= -->
+  <nav class="barra-cel" id="barraCel" aria-label="Navegação">
+    <button class="bc-item" data-view="hoje"><svg><use href="#i-hoje"/></svg><span>Hoje</span><i class="bc-badge zero" id="bcBadgeHoje">0</i></button>
+    <button class="bc-item" data-view="semana"><svg><use href="#i-semana"/></svg><span>Semana</span></button>
+    <button class="bc-item" data-view="mes"><svg><use href="#i-mes"/></svg><span>Mês</span></button>
+    <button class="bc-item" data-view="compromissos"><svg><use href="#i-lista"/></svg><span>Lista</span></button>
+    <button class="bc-item" id="bcMais"><svg><use href="#i-mais-menu"/></svg><span>Mais</span><i class="bc-badge zero" id="bcBadgeMais">0</i></button>
+  </nav>
   <aside class="rail">
     <div class="brand">
       <svg width="34" height="34" viewBox="0 0 40 40" fill="none">
@@ -3384,6 +3448,7 @@ function abrirModal(html, classe){
   modalAtivo=true;
   setTimeout(()=>{ const f=cx.querySelector('[data-autofocus]'); if(f) f.focus(); },60);
 }
+function fecharTudoCel(){ if($('#folhaMais')) fecharFolha(); }
 function fecharModal(){ $('#ovModal').classList.remove('open'); modalAtivo=null; }
 
 /* ------------------------- domínio ------------------------- */
@@ -3513,9 +3578,45 @@ function irPara(v){
   if(v===viewAtual) return trocaView(v);
   comTransicao(()=>trocaView(v));
 }
+/* ===== barra de baixo do celular ===== */
+const BC_DIRETAS=['hoje','semana','mes','compromissos'];
+const BC_MAIS=[
+  ['importar','i-ia','Importar grade'],
+  ['analise','i-analise','Análise'],
+  ['planos','i-metas','Planos & metas'],
+  ['alertas','i-sino','Alertas'],
+  ['ajustes','i-ajustes','Ajustes']
+];
+function marcarBarraCel(v){
+  $$('.bc-item[data-view]').forEach(b=>b.classList.toggle('on', b.dataset.view===v));
+  const m=$('#bcMais'); if(m) m.classList.toggle('on', BC_DIRETAS.indexOf(v)<0);
+}
+function fecharFolha(){
+  const f=$('#folhaMais'), g=$('#folhaFundo');
+  if(f) f.classList.remove('on');
+  if(g) g.classList.remove('on');
+  setTimeout(()=>{ if(f) f.remove(); if(g) g.remove(); }, 220);
+}
+function abrirFolhaMais(){
+  if($('#folhaMais')) return fecharFolha();
+  const na=(S.alertas||[]).filter(a=>!a.lido).length;
+  const g=document.createElement('div');
+  g.className='folha-fundo'; g.id='folhaFundo'; g.onclick=fecharFolha;
+  const f=document.createElement('div');
+  f.className='folha'; f.id='folhaMais';
+  f.innerHTML='<div class="folha-puxa"></div>'+BC_MAIS.map(([v,ic,rot])=>
+    `<button class="folha-item ${viewAtual===v?'on':''}" data-view="${v}">
+       <svg><use href="#${ic}"/></svg>${esc(rot)}
+       ${v==='alertas'&&na?`<span class="fi-badge">${na}</span>`:''}
+     </button>`).join('');
+  document.body.appendChild(g); document.body.appendChild(f);
+  f.querySelectorAll('.folha-item').forEach(b=>b.onclick=()=>{ const v=b.dataset.view; fecharFolha(); irPara(v); });
+  requestAnimationFrame(()=>{ g.classList.add('on'); f.classList.add('on'); });
+}
 function trocaView(v){
   viewAtual=v;
   $$('.nav-item').forEach(b=>b.classList.toggle('active', b.dataset.view===v));
+  marcarBarraCel(v);
   $$('.view').forEach(s=>{ const on=s.id==='v-'+v; s.classList.toggle('active', on); s.classList.toggle('on', on); });
   $('#tbTitulo').textContent=TITULOS[v][0];
   /* alguns subtitulos dependem de configuracao, entao sao funcao e nao texto fixo */
@@ -3542,6 +3643,9 @@ function atualizarBadges(){
   const b=$('#badgeHoje'); b.textContent=n; b.classList.toggle('zero',n===0);
   const na=(S.alertas||[]).filter(a=>!a.lido).length;
   const ba=$('#badgeAlertas'); ba.textContent=na; ba.classList.toggle('zero',na===0);
+  const bh=$('#bcBadgeHoje'); if(bh){ bh.textContent=n; bh.classList.toggle('zero',n===0); }
+  /* o sino vive dentro do Mais no celular: o aviso sobe para o botão Mais */
+  const bm=$('#bcBadgeMais'); if(bm){ bm.textContent=na; bm.classList.toggle('zero',na===0); }
 }
 
 /* ==========================================================================
@@ -9420,6 +9524,8 @@ function iniciar(){
     setInterval(()=>{ if(document.visibilityState==='visible') puxar(); }, 60000);
   }
   $$('.nav-item').forEach(b=>b.onclick=()=>irPara(b.dataset.view));
+  $$('.bc-item[data-view]').forEach(b=>b.onclick=()=>irPara(b.dataset.view));
+  $('#bcMais').onclick=abrirFolhaMais;
   $('#btnTema').onclick=e=>alternarTema(e);
   $('#btnAtalhos').onclick=modalAtalhos;
   $('#btnNovoRail').onclick=()=>modalEvento();
