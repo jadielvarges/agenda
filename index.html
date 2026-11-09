@@ -8253,8 +8253,35 @@ function nuvSair(){
 }
 
 /* ---------- estado remoto ---------- */
+/* Forma canônica antes de comparar dois estados.
+   Sem isto, duas coisas inofensivas viravam "conflito" eterno:
+     1. chaves que nascem vazias só quando uma tela precisa delas. O outro
+        aparelho enviou sem "semAula"; este, ao desenhar, criou semAula:{}.
+        Mesmo conteúdo, impressão digital diferente.
+     2. a ordem das chaves, que muda conforme o estado foi montado.
+   Chave de valor vazio é tratada como chave ausente. Apagar tudo continua
+   sendo detectado: "eventos" vazio de um lado e cheio do outro segue
+   diferente. */
+function vazio(v){
+  if(v===null || v===undefined || v==='') return true;
+  if(Array.isArray(v)) return v.length===0;
+  if(typeof v==='object') return Object.keys(v).length===0;
+  return false;
+}
+function canonico(o){
+  if(Array.isArray(o)) return o.map(canonico);
+  if(o && typeof o==='object'){
+    const out={};
+    Object.keys(o).sort().forEach(k=>{
+      const v=canonico(o[k]);
+      if(!vazio(v)) out[k]=v;
+    });
+    return out;
+  }
+  return o;
+}
 function hashEstado(o){
-  const t=JSON.stringify(o); let h=5381;
+  const t=JSON.stringify(canonico(o)); let h=5381;
   for(let i=0;i<t.length;i++) h=((h<<5)+h+t.charCodeAt(i))|0;
   return t.length+':'+(h>>>0).toString(36);
 }
@@ -8267,6 +8294,7 @@ function estadoLimpo(){
   const c=JSON.parse(JSON.stringify(S));
   if(c.config){ delete c.config.nuvem; delete c.config.apiKey; }   // nunca sobem
   delete c.nuvemVersao; delete c.nuvemEm; delete c.nuvemSnap;      // controle local
+  delete c.conflitoAdiado;                                         // so deste aparelho
   NUV_LOCAIS.forEach(k=>delete c[k]);                              // so deste aparelho
   return c;
 }
@@ -8281,10 +8309,12 @@ async function nuvSubir(versao){
   await nuvFetch('/rest/v1/agenda_estado?on_conflict=user_id',{
     method:'POST', headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},
     body:JSON.stringify(corpo)});
+  delete S.conflitoAdiado;
   S.nuvemVersao=versao; S.nuvemEm=Date.now(); S.nuvemSnap=hashEstado(estadoLimpo()); salvar(true);
 }
 function nuvAplicar(remoto){
   const d=remoto.dados||{};
+  delete S.conflitoAdiado;
   const nuvem=nuvCfg(), api=S.config.apiKey||'';
   /* o que e so deste aparelho nao vem da nuvem nem se perde ao receber */
   const locais={}; NUV_LOCAIS.forEach(k=>{ if(S[k]!==undefined) locais[k]=S[k]; });
@@ -8342,7 +8372,10 @@ async function nuvSincronizar(manual){
         if(manual) toast('ok','Dados baixados da nuvem', `Última alteração em ${esc(rem.aparelho||'outro aparelho')}.`);
       }
       else {                                    /* os dois mexeram sem se falar */
-        pintarNuvem('conflito'); modalConflito(rem);
+        pintarNuvem('conflito');
+        /* perguntar uma vez por versao da nuvem. Sem isto, a janela voltava
+           a cada sincronizacao e o professor nao conseguia usar a agenda. */
+        if(S.conflitoAdiado !== (rem.versao||0)) modalConflito(rem);
       }
     }
   }catch(e){ pintarNuvem('erro', e.message); if(manual) toast('err','Falha na sincronização', esc(e.message)); }
@@ -8366,6 +8399,10 @@ function nuvEnviarPendente(){
   clearTimeout(nuvTimer); nuvTimer=null;
   nuvSincronizar(false);
 }
+function adiarConflito(versao){
+  S.conflitoAdiado=versao||0; salvar(true);
+  toast('info','Deixado para depois','O aviso volta só quando a nuvem mudar de novo. Em Ajustes, no quadro Nuvem, você resolve quando quiser.');
+}
 function modalConflito(rem){
   const quando=rem.atualizado_em?new Date(rem.atualizado_em).toLocaleString('pt-BR'):'momento desconhecido';
   abrirModal(`<div class="modal-h"><h3>Duas versões diferentes</h3>
@@ -8385,7 +8422,7 @@ function modalConflito(rem){
     <div class="modal-f">
       <button class="btn btn-sm" onclick="exportarJson()"><svg><use href="#i-baixar"/></svg>Backup</button>
       <div class="sp"></div>
-      <button class="btn" onclick="fecharModal()">Decidir depois</button>
+      <button class="btn" onclick="adiarConflito(${rem.versao||0});fecharModal()">Decidir depois</button>
       <button class="btn btn-p" id="cfOk"><svg><use href="#i-check"/></svg>Aplicar</button>
     </div>`,'slim');
   $$('.del-op').forEach(el=>el.onclick=()=>{ $$('.del-op').forEach(x=>x.classList.remove('on')); el.classList.add('on'); });
