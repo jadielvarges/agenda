@@ -301,6 +301,15 @@ html[data-tema="claro"] .chip.on{background:rgba(242,193,78,.24);border-color:#D
 .folha-item.on svg{color:var(--gold)}
 .folha-item .fi-badge{margin-left:auto;background:var(--coral);color:#fff;font-size:10px;
   padding:2px 7px;border-radius:999px;font-family:var(--ff-mono)}
+.dg-l{display:flex;gap:11px;align-items:flex-start;padding:11px 0;border-bottom:1px solid var(--line)}
+.dg-l:last-child{border-bottom:none}
+.dg-i{width:21px;height:21px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:12px;flex:none;border:1px solid var(--line-strong)}
+.dg-l.bom .dg-i{color:var(--menta);border-color:var(--menta)}
+.dg-l.ruim .dg-i{color:var(--coral);border-color:var(--coral)}
+.dg-l.esperando .dg-i{color:var(--faint)}
+.dg-l b{display:block;font-size:13px;color:var(--text-2);font-weight:600}
+.dg-l span{display:block;margin-top:3px;font-size:12px;color:var(--muted);line-height:1.5;overflow-wrap:anywhere}
 /* fechamento por turma */
 .fech-datas{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:0 0 14px}
 .fech-datas>div{display:flex;align-items:center;gap:8px}
@@ -1541,10 +1550,32 @@ html[data-legivel="1"] .mes-cel .dn{font-size:14px}
   .semana-head,.semana-body{grid-template-columns:44px repeat(7,minmax(112px,1fr));min-width:830px}
   .semana-body{overflow-y:visible}
   .col-horas{width:44px}
-  .mes-grid{min-width:660px}
-  .mes-wrap,#mesGrid{overflow-x:auto;-webkit-overflow-scrolling:touch}
-  .mes-cel{min-height:104px}
-  .mes-ev .me-u{display:none}
+  /* o mês tinha 660px de largura e rolava para o lado: o professor via 3 dias
+     e meio de 7. No celular ele passa a caber inteiro, com bolinhas no lugar
+     dos cartões. Tocar no dia abre a lista daquele dia, como já fazia. */
+  .mes-grid{min-width:0;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+  .mes-wrap,#mesGrid{overflow-x:visible}
+  .mes-head{font-size:8px;letter-spacing:.06em;padding:3px 0}
+  .mes-cel{min-height:58px;padding:5px 2px 9px;gap:2px;align-items:center;border-radius:9px}
+  .mes-cel:hover{transform:none}
+  .mes-cel .dn{font-size:12.5px;justify-content:center}
+  .mes-cel .dq{display:none}
+  /* cada compromisso vira uma bolinha da cor dele */
+  .mes-ev{
+    all:unset;display:block;width:6px;height:6px;border-radius:50%;
+    background:var(--cv,var(--c));flex:none
+  }
+  .mes-ev.feito{opacity:.4}
+  .mes-ev.inativo{background:var(--faint);opacity:.45}
+  /* .mes-ev .me-t.duas soma 3 classes e vencia o seletor universal, deixando
+     a primeira letra do título solta dentro da bolinha. Daí os 3 níveis aqui. */
+  .mes-grid .mes-cel .mes-ev *{display:none}
+  .mes-mais{font-family:var(--ff-mono);font-size:9px;color:var(--faint);line-height:1;margin-top:2px}
+  .mes-mais .mm-p{display:none}
+  /* as bolinhas lado a lado, não empilhadas */
+  .mes-cel{flex-direction:column}
+  .mes-cel .mes-ev{margin:0 auto}
+  .mes-carga{height:3px}
   .hora-lbl{font-size:9px}
   .f-2,.f-3{grid-template-columns:1fr}
   .toasts{left:12px;right:12px;bottom:12px;max-width:none}
@@ -5272,7 +5303,7 @@ function renderMes(){
       ${pds.map(x=>`<b class="mes-faixa ${bordaPeriodo(x,dISO)}" style="--pc:${x.cor}"></b>`).join('')}
       <div class="dn"><span>${String(d.getDate()).padStart(2,'0')}</span>${min?`<span class="dq mono">${fmtDur(min)}</span>`:''}</div>
       ${mesModo==='eventos'
-        ? l.slice(0,2).map(o=>chipMes(o, l.length===1)).join('')+(l.length>2?`<div class="mes-mais">+${l.length-2} ${l.length-2===1?'compromisso':'compromissos'}</div>`:'')
+        ? l.slice(0,2).map(o=>chipMes(o, l.length===1)).join('')+(l.length>2?`<div class="mes-mais">+${l.length-2}<span class="mm-p"> ${l.length-2===1?'compromisso':'compromissos'}</span></div>`:'')
         : ''}
       <div class="mes-carga" style="width:${clamp(min/480*100,0,100)}%;background:${min>420?'var(--coral)':min>240?'var(--gold)':'var(--menta)'}"></div>
     </div>`;
@@ -8408,9 +8439,76 @@ function renderNuvem(){
       <button class="btn btn-sm btn-p" onclick="nuvEntrar(false)"><svg><use href="#i-user"/></svg>Entrar</button>
       <button class="btn btn-sm" onclick="nuvEntrar(true)"><svg><use href="#i-mais"/></svg>Criar conta</button>
       <button class="btn btn-sm" onclick="modalComoNuvem()"><svg><use href="#i-info"/></svg>Como configurar</button>
+      <button class="btn btn-sm" onclick="modalDiagNuvem()"><svg><use href="#i-busca"/></svg>Testar a nuvem</button>
     </div>`;
   if($('#nuvAuto')) $('#nuvAuto').onchange=e=>{ nuvCfg().auto=e.target.checked; salvar(true); };
   if(s) pintarNuvem(nuvEmCurso?'sincronizando':'ok');
+}
+/* ===== diagnóstico da nuvem =====
+   Serve para o professor ver numa tela só o que está acontecendo, sem
+   depender de um aviso que some em três segundos, e para mandar um print
+   quando precisa de ajuda. */
+function dgLinha(ok, titulo, detalhe){
+  return `<div class="dg-l ${ok===null?'esperando':(ok?'bom':'ruim')}">
+    <span class="dg-i">${ok===null?'…':(ok?'✓':'✕')}</span>
+    <div><b>${esc(titulo)}</b>${detalhe?`<span>${esc(detalhe)}</span>`:''}</div></div>`;
+}
+async function modalDiagNuvem(){
+  abrirModal(`<div class="modal-h"><h3>Teste da nuvem</h3>
+    <button class="x-btn" onclick="fecharModal()"><svg style="width:15px;height:15px"><use href="#i-x"/></svg></button></div>
+  <div class="modal-b"><div id="dgCorpo"><div class="dg-l esperando"><span class="dg-i">…</span><div><b>Testando</b></div></div></div></div>
+  <div class="modal-f"><div class="sp"></div>
+    <button class="btn btn-fechar" onclick="fecharModal()">Fechar Formulário</button>
+    <button class="btn btn-p hidden" id="dgPuxar"><svg><use href="#i-baixar"/></svg>Trazer tudo da nuvem</button></div>`,'wide');
+  const cx=$('#dgCorpo'); const linhas=[];
+  const pinta=()=>{ cx.innerHTML=linhas.join(''); };
+  const c=nuvCfg(), ses=nuvSessao();
+
+  linhas.push(dgLinha(!!c.url, 'Endereço do projeto', c.url||'vazio'));
+  linhas.push(dgLinha(!!c.anon, 'Chave do projeto', c.anon?('preenchida, '+c.anon.length+' caracteres'):'vazia'));
+  pinta();
+  if(!c.url || !c.anon){
+    linhas.push(dgLinha(false,'Pare aqui','Este aparelho está com um arquivo antigo, sem o projeto embutido. Recarregue a página forçando a atualização.'));
+    return pinta();
+  }
+  /* 2. a internet deste aparelho alcança o projeto? */
+  let alcanca=false;
+  try{
+    const r=await fetch(c.url.replace(/\/+$/,'')+'/auth/v1/health',{headers:{apikey:c.anon}});
+    alcanca=r.ok;
+    linhas.push(dgLinha(r.ok,'Internet alcança o projeto','resposta '+r.status));
+  }catch(e){
+    linhas.push(dgLinha(false,'Internet não alcança o projeto', e.message||'sem conexão'));
+  }
+  pinta();
+  /* 3. entrou na conta? */
+  linhas.push(dgLinha(!!(ses&&ses.access_token),'Entrou na conta', ses&&ses.email ? ses.email : 'ainda não entrou neste aparelho'));
+  pinta();
+  if(!ses || !ses.access_token){
+    linhas.push(dgLinha(false,'É isto que falta','Preencha e-mail e senha acima e toque em Entrar. Use os mesmos do outro aparelho.'));
+    return pinta();
+  }
+  /* 4. o que existe na nuvem */
+  try{
+    const rem=await nuvBaixar();
+    if(!rem){
+      linhas.push(dgLinha(false,'A nuvem está vazia','Nenhum aparelho enviou dados ainda.'));
+    }else{
+      const d=rem.dados||{}, n=(d.eventos||[]).length;
+      linhas.push(dgLinha(n>0,'A nuvem tem '+n+' '+plural(n,'compromisso','compromissos'),
+        'enviados por '+(rem.aparelho||'?')+(rem.atualizado_em?', em '+new Date(rem.atualizado_em).toLocaleString('pt-BR'):'')));
+      linhas.push(dgLinha(true,'Este aparelho tem '+S.eventos.length+' '+plural(S.eventos.length,'compromisso','compromissos'),''));
+      if(n>0 && n!==S.eventos.length){
+        linhas.push(dgLinha(null,'Os dois estão diferentes','Use o botão abaixo para trazer tudo da nuvem para este aparelho.'));
+        const b=$('#dgPuxar');
+        b.classList.remove('hidden');
+        b.onclick=async()=>{ b.disabled=true; await nuvForcarBaixar(); fecharModal(); };
+      }
+    }
+  }catch(e){
+    linhas.push(dgLinha(false,'Não consegui ler a nuvem', e.message||'erro'));
+  }
+  pinta();
 }
 async function nuvForcarBaixar(){
   try{
