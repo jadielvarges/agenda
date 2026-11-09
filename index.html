@@ -8011,10 +8011,24 @@ const NUV_SESSAO='agenda.nuvem.sessao';
 const NUV_APAR='agenda.nuvem.aparelho';
 let nuvTimer=null, nuvEmCurso=false;
 
+/* O projeto da nuvem vem embutido no arquivo publicado. Assim, qualquer
+   aparelho que abrir o endereço já nasce apontando para o lugar certo e só
+   falta entrar com e-mail e senha. Antes, era preciso digitar o endereço e a
+   chave em cada aparelho, e foi por isso que a agenda do celular apareceu
+   vazia. A chave anon é pública por natureza: quem protege os dados é o
+   login mais a regra de dono na tabela. */
+const NUV_PADRAO = {
+  url : 'https://dfrixxinlyixnmpascse.supabase.co',
+  anon: 'sb_publishable_58-vW-SfBmBxnAJp1EtnpQ_1hCHvnF0'
+};
 function nuvCfg(){
   S.config.nuvem = S.config.nuvem || {url:'', anon:'', auto:true};
-  return S.config.nuvem;
+  const c=S.config.nuvem;
+  if(!c.url  && NUV_PADRAO.url ) c.url =NUV_PADRAO.url;
+  if(!c.anon && NUV_PADRAO.anon) c.anon=NUV_PADRAO.anon;
+  return c;
 }
+function nuvJaConfigurado(){ const c=nuvCfg(); return !!(c.url && c.anon); }
 function nuvSessao(){
   try{ return JSON.parse(localStorage.getItem(NUV_SESSAO)||'null'); }catch(e){ return null; }
 }
@@ -8322,7 +8336,7 @@ create policy "dono" on agenda_estado
   with check (auth.uid() = user_id);</pre>
           <button class="btn btn-sm" onclick="copiarSQL(this)"><svg><use href="#i-copia"/></svg>Copiar</button></div></div>
         <div class="pss"><b>3</b><div><p>Em <span class="destaque-suave">Project Settings → API</span>, copie a <b>URL</b> e a chave <b>anon public</b>. Cole aqui nos dois campos.</p></div></div>
-        <div class="pss"><b>4</b><div><p>Crie sua conta com e-mail e senha, e repita o passo 3 em cada aparelho. Os dados passam a viajar sozinhos.</p></div></div>
+        <div class="pss"><b>4</b><div><p>Crie sua conta com e-mail e senha aqui em Ajustes. Em cada aparelho novo, abra o endereço da agenda e <b>entre com o mesmo e-mail e a mesma senha</b>. Só isso: os dados passam a viajar sozinhos nos dois sentidos.</p></div></div>
       </div>
       <div class="nota-lista">
         <p><b class="destaque-suave">Sobre privacidade:</b> a política acima garante que só a sua conta lê e escreve os seus dados.</p>
